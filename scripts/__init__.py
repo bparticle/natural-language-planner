@@ -11,6 +11,8 @@ Modules:
     file_manager    - Core CRUD operations for projects and tasks
     index_manager   - Fast search and lookup optimization
     dashboard_server - Local web server for the visual dashboard
+    tunnel          - Cloudflare/ngrok tunnel integration for remote access
+    export          - Static HTML snapshot export for deployment
 """
 
 __version__ = "1.0.0"

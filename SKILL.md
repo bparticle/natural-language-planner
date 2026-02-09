@@ -334,18 +334,38 @@ PNG, JPG, JPEG, GIF, WebP, SVG, BMP — all displayed inline in the gallery.
 
 The skill includes a local web dashboard for a visual overview.
 
-### Starting the dashboard
+### Dashboard lifecycle
 
-When the user asks for an overview, or wants to see their tasks visually:
+The dashboard should be **always on** and **always current** when the agent
+is working with tasks.  Use `ensure_dashboard()` — never `start_dashboard()`
+directly — so the agent handles start, health-check, and port recovery
+automatically.
+
+**Rules for the agent:**
+
+1. **Auto-start** — Call `ensure_dashboard()` whenever you create, update,
+   list, or search tasks.  The user should never need to ask for the
+   dashboard; it should just be there.
+2. **Always current** — Call `rebuild_index()` after any write operation
+   (create / update / archive / move) so the next dashboard poll picks up
+   changes immediately.
+3. **Proactive URL reminder** — After the first task operation in a
+   conversation, mention the dashboard URL once (e.g. "Your dashboard is
+   live at http://localhost:8080").  Do not repeat it on every operation.
+4. **Port recovery** — If the configured port is occupied (e.g. from a
+   previous session), `ensure_dashboard()` automatically tries the next
+   ports and persists the one it finds.
 
 ```python
-from scripts.dashboard_server import start_dashboard
-url = start_dashboard()  # Returns "http://localhost:8080"
-```
+from scripts.dashboard_server import ensure_dashboard
+from scripts.index_manager import rebuild_index
 
-Tell the user:
-> "Your dashboard is running at http://localhost:8080 — open it in your
-> browser to see the Kanban board, project overview, and timeline."
+# Always use ensure_dashboard() — safe to call repeatedly
+url = ensure_dashboard()  # Returns "http://localhost:8080"
+
+# After any write operation, rebuild the index
+rebuild_index()
+```
 
 ### Dashboard features (for user reference)
 
@@ -366,6 +386,66 @@ Tell the user:
 from scripts.dashboard_server import stop_dashboard
 stop_dashboard()
 ```
+
+### Remote access (tunnels)
+
+When the user wants to access their dashboard from another device or share
+a link, use the built-in tunnel integration.
+
+```python
+from scripts.tunnel import start_tunnel, stop_tunnel, detect_tunnel_tool, get_install_instructions
+from scripts.dashboard_server import ensure_dashboard, get_dashboard_port
+
+# Ensure dashboard is running first
+url = ensure_dashboard()
+port = get_dashboard_port()
+
+# Check for a tunnel tool
+tool = detect_tunnel_tool()  # Returns "cloudflared", "ngrok", "lt", or None
+
+if tool:
+    public_url = start_tunnel(port, tool=tool)
+    # Tell the user: "Your dashboard is now available at <public_url>"
+else:
+    # Give the user install instructions
+    instructions = get_install_instructions()
+```
+
+**Rules for the agent:**
+
+1. Only start a tunnel when the user explicitly asks for remote/domain
+   access — never automatically.
+2. Warn the user that the dashboard has no authentication.  Anyone with the
+   URL can see their tasks.
+3. Cloudflare Tunnel (`cloudflared`) is recommended because it's free and
+   requires no account for quick tunnels.
+4. When the user is done, call `stop_tunnel()`.
+
+### Export / static hosting
+
+For users who want to host a read-only snapshot of their dashboard on a
+custom domain (GitHub Pages, Netlify, Vercel, etc.), provide a static export.
+
+```python
+from scripts.export import export_dashboard
+
+# Export with default output directory (<workspace>/.nlplanner/export/)
+path = export_dashboard()
+
+# Export to a custom directory (e.g. a git-managed docs/ folder)
+path = export_dashboard(output_dir="./docs")
+```
+
+**Rules for the agent:**
+
+1. Only export when the user asks for it.
+2. Explain that the export is a **point-in-time snapshot** — it will not
+   auto-update.  The user needs to re-export after changes.
+3. Suggest free hosting options:
+   - **GitHub Pages**: push the export to a `docs/` folder and enable Pages
+   - **Netlify / Vercel**: drag-and-drop the exported folder
+4. For automated freshness, suggest a git hook or cron job that re-runs the
+   export.
 
 ---
 

@@ -23,6 +23,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "auto_archive_completed_days": 30,
         "default_priority": "medium",
         "dashboard_port": 8080,
+        "dashboard_auto_start": True,
+        "dashboard_allow_network": False,
         "enable_notifications": False,
     },
     "preferences": {

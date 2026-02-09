@@ -12,14 +12,16 @@ with FastAPI or similar, but this works great for local use.
 import json
 import logging
 import mimetypes
+import socket
 import threading
+import time
 from functools import partial
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse, parse_qs, unquote
 
-from .config_manager import load_config
+from .config_manager import load_config, set_setting, get_setting
 from .file_manager import list_projects, list_tasks, get_project, get_task
 from .index_manager import rebuild_index, get_stats, search_tasks, get_tasks_due_soon, get_overdue_tasks
 
@@ -27,6 +29,7 @@ logger = logging.getLogger("nlplanner.dashboard")
 
 _server: Optional[HTTPServer] = None
 _thread: Optional[threading.Thread] = None
+_started_at: float = 0.0
 
 
 class DashboardHandler(SimpleHTTPRequestHandler):
@@ -63,9 +66,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             "/api/search": self._api_search,
             "/api/due-soon": self._api_due_soon,
             "/api/overdue": self._api_overdue,
+            "/api/health": self._api_health,
         }
 
-        # Dynamic routes: /api/project/<id>, /api/task/<id>, /api/attachment/<project>/<file>
+        # Dynamic routes: /api/attachment/<project>/<file>, /api/project/<id>, /api/task/<id>
         if path.startswith("/api/attachment/"):
             parts = path.split("/api/attachment/")[1].strip("/").split("/", 1)
             if len(parts) == 2:
@@ -89,6 +93,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._json_response({"error": "Not found"}, status=404)
 
     # ── API handlers ───────────────────────────────────────────
+
+    def _api_health(self, params: dict) -> None:
+        """Return server health status and uptime."""
+        uptime = round(time.time() - _started_at, 1) if _started_at else 0
+        self._json_response({
+            "status": "ok",
+            "uptime_seconds": uptime,
+            "port": _server.server_address[1] if _server else None,
+        })
 
     def _api_stats(self, params: dict) -> None:
         rebuild_index()
@@ -193,7 +206,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         logger.debug(format, *args)
 
 
-# ── Public functions ───────────────────────────────────────────────
+# ── Internal helpers ──────────────────────────────────────────────
 
 def _resolve_dashboard_dir() -> str:
     """
@@ -219,51 +232,161 @@ def _resolve_dashboard_dir() -> str:
     return "."
 
 
-def start_dashboard(port: Optional[int] = None) -> str:
+def _is_port_available(host: str, port: int) -> bool:
+    """Check if a TCP port is available for binding."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((host, port))
+            return True
+    except OSError:
+        return False
+
+
+def _find_available_port(host: str, start_port: int, max_attempts: int = 10) -> int:
+    """
+    Find an available port starting from start_port.
+
+    Tries consecutive ports until one is available.
+
+    Args:
+        host: The host to bind to.
+        start_port: Port to try first.
+        max_attempts: How many consecutive ports to try.
+
+    Returns:
+        An available port number.
+
+    Raises:
+        OSError: If no port is available within the range.
+    """
+    for offset in range(max_attempts):
+        port = start_port + offset
+        if _is_port_available(host, port):
+            return port
+    raise OSError(
+        f"No available port found in range {start_port}-{start_port + max_attempts - 1}"
+    )
+
+
+def _resolve_host() -> str:
+    """Return the bind host based on configuration."""
+    config = load_config()
+    allow_network = config.get("settings", {}).get("dashboard_allow_network", False)
+    return "0.0.0.0" if allow_network else "127.0.0.1"
+
+
+# ── Public functions ──────────────────────────────────────────────
+
+def start_dashboard(port: Optional[int] = None, allow_network: Optional[bool] = None) -> str:
     """
     Start the dashboard web server in a background thread.
 
+    If the requested port is occupied, automatically tries the next
+    consecutive ports until one is available.
+
     Args:
         port: Port number (default: from config or 8080).
+        allow_network: If True, bind to 0.0.0.0 (all interfaces).
+                       If None, reads from config.
 
     Returns:
-        The dashboard URL.
+        The dashboard URL, or empty string on failure.
 
     Example:
         >>> url = start_dashboard()
         >>> print(url)
         http://localhost:8080
     """
-    global _server, _thread
+    global _server, _thread, _started_at
 
     if _server is not None:
         logger.info("Dashboard is already running.")
         return get_dashboard_url()
 
+    config = load_config()
+
     if port is None:
-        config = load_config()
         port = config.get("settings", {}).get("dashboard_port", 8080)
 
+    if allow_network is None:
+        allow_network = config.get("settings", {}).get("dashboard_allow_network", False)
+
+    host = "0.0.0.0" if allow_network else "127.0.0.1"
     dashboard_dir = _resolve_dashboard_dir()
     handler = partial(DashboardHandler, dashboard_dir=dashboard_dir)
 
+    # Try the configured port first, then search for an available one
     try:
-        _server = HTTPServer(("127.0.0.1", port), handler)
+        actual_port = _find_available_port(host, port)
+        if actual_port != port:
+            logger.info(
+                "Port %d is occupied, using port %d instead.", port, actual_port
+            )
     except OSError as e:
-        logger.error("Could not start dashboard on port %d: %s", port, e)
+        logger.error("Could not find an available port: %s", e)
         return ""
 
+    try:
+        _server = HTTPServer((host, actual_port), handler)
+    except OSError as e:
+        logger.error("Could not start dashboard on port %d: %s", actual_port, e)
+        return ""
+
+    _started_at = time.time()
     _thread = threading.Thread(target=_server.serve_forever, daemon=True)
     _thread.start()
 
-    url = f"http://localhost:{port}"
+    url = f"http://localhost:{actual_port}"
     logger.info("Dashboard started at %s (serving from %s)", url, dashboard_dir)
+
+    # Persist the actual port so subsequent calls know where it is
+    if actual_port != port:
+        set_setting("dashboard_port", actual_port)
+
+    return url
+
+
+def ensure_dashboard(port: Optional[int] = None) -> str:
+    """
+    Ensure the dashboard is running and healthy.
+
+    This is the recommended function for the agent to call. It:
+    1. Returns the existing URL if the server is already running.
+    2. Starts a new server if not running, with automatic port recovery.
+    3. Verifies the server is responsive.
+
+    Args:
+        port: Optional port override.
+
+    Returns:
+        The dashboard URL, or empty string on failure.
+
+    Example:
+        >>> url = ensure_dashboard()
+        >>> print(url)
+        http://localhost:8080
+    """
+    if is_running():
+        return get_dashboard_url()
+
+    url = start_dashboard(port=port)
+    if not url:
+        return ""
+
+    # Brief pause to let the server thread start accepting connections
+    time.sleep(0.1)
+
+    if is_running():
+        logger.info("Dashboard ensured at %s", url)
+        return url
+
+    logger.warning("Dashboard started but may not be healthy.")
     return url
 
 
 def stop_dashboard() -> None:
     """Stop the running dashboard server."""
-    global _server, _thread
+    global _server, _thread, _started_at
 
     if _server is None:
         logger.info("Dashboard is not running.")
@@ -272,6 +395,7 @@ def stop_dashboard() -> None:
     _server.shutdown()
     _server = None
     _thread = None
+    _started_at = 0.0
     logger.info("Dashboard stopped.")
 
 
@@ -288,6 +412,30 @@ def get_dashboard_url() -> str:
     return f"http://localhost:{port}"
 
 
+def get_dashboard_port() -> int:
+    """
+    Get the port of the running dashboard.
+
+    Returns:
+        The port number, or 0 if not running.
+    """
+    if _server is None:
+        return 0
+    return _server.server_address[1]
+
+
 def is_running() -> bool:
     """Check whether the dashboard server is currently running."""
     return _server is not None
+
+
+def get_uptime() -> float:
+    """
+    Get dashboard uptime in seconds.
+
+    Returns:
+        Uptime in seconds, or 0.0 if not running.
+    """
+    if not is_running() or _started_at == 0.0:
+        return 0.0
+    return time.time() - _started_at

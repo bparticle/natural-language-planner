@@ -36,11 +36,11 @@ The assistant will:
 
 ### 4. Open the dashboard (optional)
 
-Ask the assistant to start the dashboard, or run:
+The AI assistant automatically starts the dashboard when you work with tasks.
+You can also start it manually:
 
-```python
-from scripts.dashboard_server import start_dashboard
-start_dashboard()  # → http://localhost:8080
+```bash
+python -m scripts dashboard ~/nlplanner
 ```
 
 ## Workspace Structure
@@ -75,23 +75,69 @@ Settings live in `.nlplanner/config.json`:
 | `auto_archive_completed_days` | 30 | Days before done tasks auto-archive |
 | `default_priority` | `"medium"` | Default priority for new tasks |
 | `dashboard_port` | 8080 | Port for the local dashboard |
+| `dashboard_auto_start` | `true` | Agent auto-starts the dashboard on first task operation |
+| `dashboard_allow_network` | `false` | Bind to all interfaces (0.0.0.0) instead of localhost |
 
 ## Dashboard Features
 
 The browser-based dashboard includes:
 
+- **This Week view** — focus cards for what you're working on this week
 - **Kanban board** — drag-free columns for To Do, In Progress, Done
 - **Project overview** — cards showing each project with task counts
 - **Timeline** — upcoming deadlines sorted by date
 - **Search** — find any task instantly
-- **Task detail modal** — click to see full task info
+- **Task detail modal** — click to see full task info, attachments, and AI tips
+- **Image gallery** — attachments displayed as thumbnails with lightbox
+- **Dark mode** — toggle via the header icon (persists across sessions)
 - **Auto-refresh** — updates every 5 seconds
+
+## Remote Access (Tunnels)
+
+Want to check your dashboard from your phone or share a link with someone?
+The planner can create a secure tunnel to expose your local dashboard.
+
+```bash
+# Auto-detects cloudflared, ngrok, or localtunnel
+python -m scripts tunnel ~/nlplanner
+```
+
+Or ask the AI: *"Make my dashboard accessible from my phone."*
+
+**Supported tools** (install one):
+
+| Tool | Install | Notes |
+|---|---|---|
+| Cloudflare Tunnel | `winget install cloudflare.cloudflared` / `brew install cloudflared` | Free, no account needed for quick tunnels |
+| ngrok | [ngrok.com/download](https://ngrok.com/download) | Free tier, requires account |
+| localtunnel | `npm install -g localtunnel` | Free, no account |
+
+> **Security note:** The dashboard has no authentication. Anyone with the
+> tunnel URL can view your tasks. Share the link carefully.
+
+## Static Export
+
+Export a self-contained HTML snapshot of your dashboard for hosting on any
+static platform (GitHub Pages, Netlify, Vercel).
+
+```bash
+# Default: exports to <workspace>/.nlplanner/export/
+python -m scripts export ~/nlplanner
+
+# Export to a specific directory (e.g. for GitHub Pages)
+python -m scripts export ~/nlplanner --output ./docs
+```
+
+The export inlines all CSS, JS, and data into a single `index.html` that
+works without a server. Note that exports are snapshots — re-export after
+changes for an updated version.
 
 ## Requirements
 
 - **Python 3.9+**
 - **PyYAML** (`pip install pyyaml`)
 - No other external dependencies for core functionality
+- For remote access: `cloudflared`, `ngrok`, or `localtunnel` (optional)
 
 ## Project Structure
 
@@ -99,10 +145,14 @@ The browser-based dashboard includes:
 natural-language-planner/
 ├── SKILL.md              # AI skill instructions
 ├── scripts/
+│   ├── __init__.py       # Package init
+│   ├── __main__.py       # CLI entry point
 │   ├── file_manager.py   # CRUD for projects and tasks
 │   ├── config_manager.py # Settings management
 │   ├── index_manager.py  # Search and lookup
-│   ├── dashboard_server.py # Local web server
+│   ├── dashboard_server.py # Local web server + auto-start
+│   ├── tunnel.py         # Remote access via tunnels
+│   ├── export.py         # Static HTML snapshot export
 │   └── utils.py          # Shared utilities
 ├── templates/
 │   ├── dashboard/        # HTML/CSS/JS for the dashboard
@@ -128,16 +178,21 @@ Contributions are welcome! Here's how:
 python -m pytest tests/ -v
 
 # Start dashboard in development
-python -c "from scripts.dashboard_server import start_dashboard; start_dashboard(); input('Press Enter to stop')"
+python -m scripts dashboard ~/nlplanner
+
+# Start a tunnel for remote access
+python -m scripts tunnel ~/nlplanner
+
+# Export a static snapshot
+python -m scripts export ~/nlplanner --output ./docs
 ```
 
 ### Areas for contribution
 
 - Better natural date parsing
 - Drag-and-drop in the Kanban board
-- Export to other formats (JSON, CSV)
 - Import from Todoist / Notion / other tools
-- CLI interface
+- Authentication for tunneled dashboards
 - Time tracking
 
 ## Design Principles
