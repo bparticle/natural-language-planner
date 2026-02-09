@@ -323,9 +323,10 @@ body.dark .theme-toggle .icon-moon { display: none; }
   background: var(--surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
-  padding: 18px 20px;
+  padding: 0;
   cursor: pointer;
   transition: box-shadow var(--transition), border-color var(--transition);
+  overflow: hidden;
 }
 
 .focus-card:hover {
@@ -503,6 +504,48 @@ body.dark .theme-toggle .icon-moon { display: none; }
 .task-card-due.overdue {
   color: var(--red);
   font-weight: 600;
+}
+
+/* ── Card banner image ─────────────────────────────────────────── */
+.card-banner {
+  border-radius: var(--radius) var(--radius) 0 0;
+  overflow: hidden;
+  height: 80px;
+  margin: -12px -14px 10px -14px;
+}
+
+.card-banner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.task-card.has-banner {
+  padding-top: 12px;
+}
+
+.task-card.has-banner .card-banner {
+  margin-top: -12px;
+}
+
+/* Focus card banner — slightly taller */
+.card-banner-lg {
+  height: 110px;
+  margin: -18px -20px 14px -20px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.focus-card.has-banner {
+  padding-top: 0;
+}
+
+.focus-card.has-banner .focus-card-content {
+  padding: 0 20px 18px;
+}
+
+.focus-card:not(.has-banner) .focus-card-content {
+  padding: 18px 20px;
 }
 
 .priority-dot {

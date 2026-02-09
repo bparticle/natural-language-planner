@@ -76,8 +76,22 @@ can from the conversation. Fill in reasonable defaults for anything missing.
   *whenever*, *low priority*, *nice to have* → low; otherwise medium.
 - **Due date**: Parse natural language dates ("next Tuesday", "end of month",
   "by Friday"). Convert to ISO format (`YYYY-MM-DD`).
-- **Tags**: Infer from domain context. Examples: `backend`, `design`,
-  `personal`, `meeting`, `bug`.
+- **Tags**: Intelligently infer tags from context. Follow these rules:
+  1. **Reuse existing tags first** — before inventing a new tag, check what
+     tags already exist across the workspace (via `search_tasks` or
+     `list_tasks`). Consistent tagging makes filtering useful.
+  2. **Infer from domain** — if the user says "fix the login bug", add
+     `bug` and `auth`. If they say "design the landing page", add `design`
+     and `frontend`.
+  3. **Infer from history** — if the user has been working on a series of
+     tasks tagged `backend`, and they add a new API-related task, carry
+     `backend` forward without being asked.
+  4. **Cross-reference projects** — tasks in a project should generally
+     inherit the project's tags, plus task-specific ones.
+  5. **Keep tags short and lowercase** — single words or hyphenated phrases
+     (e.g., `ui`, `bug-fix`, `q1-planning`).
+  6. **Suggest but don't over-tag** — 2–4 tags per task is ideal. Don't add
+     tags that add no filtering value (e.g., don't tag everything `task`).
 - **Dependencies**: "Before I do X, I need Y" → link Y as dependency of X.
 - **Context**: Save a brief summary of the conversation that led to the task.
 
@@ -148,6 +162,20 @@ update_task("task-001", {"last_checkin": today_str(), "status": "in-progress"})
 - If the user seems busy or dismissive, back off.
 - Prioritise overdue and high-priority tasks.
 - Never check in on tasks marked as `done` or `archived`.
+
+### Refining metadata during check-ins
+
+Check-ins are a good opportunity to improve task metadata based on what
+you've learned:
+
+- **Refine tags** — if a task was tagged `research` but the user describes
+  implementation work, update the tags to reflect reality.
+- **Add missing tags** — if you notice a pattern (e.g., several tasks are
+  clearly `frontend` work but weren't tagged), add the tag.
+- **Update priority** — if the user signals urgency ("I really need to
+  finish this"), bump the priority.
+- **Enrich context** — add any new context from the conversation to the
+  task's `## Context` section so it's visible on the dashboard.
 
 ---
 

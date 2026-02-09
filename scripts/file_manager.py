@@ -5,6 +5,7 @@ Handles creation, reading, updating, listing, and archiving of projects
 and tasks stored as Markdown files with YAML frontmatter.
 """
 
+import re
 import shutil
 import logging
 from pathlib import Path
@@ -490,8 +491,13 @@ def list_tasks(
             raw = safe_read_file(task_file)
             if raw is None:
                 continue
-            meta, _ = parse_frontmatter(raw)
+            meta, body = parse_frontmatter(raw)
             meta["_path"] = str(task_file)
+
+            # Extract first image attachment as thumbnail
+            thumb = _extract_first_image(body)
+            if thumb:
+                meta["thumbnail"] = thumb
 
             if _matches_filter(meta, filter_by):
                 tasks.append(meta)
@@ -763,6 +769,30 @@ def get_task_agent_tips(task_id: str) -> list[str]:
 
 
 # ── Internal helpers ───────────────────────────────────────────────
+
+_IMG_LINK_RE = re.compile(
+    r"\[([^\]]*)\]\(([^)]+\.(?:png|jpe?g|gif|webp|svg|bmp))\)",
+    re.IGNORECASE,
+)
+
+
+def _extract_first_image(body: str) -> Optional[str]:
+    """
+    Extract the filename of the first image attachment from a task body.
+
+    Scans the markdown body for image links (``[name](path.ext)``) where
+    the extension is a known image format.  Returns just the filename
+    (not the full path) so the dashboard can build the API URL.
+
+    Returns:
+        The image filename, or None if no images found.
+    """
+    match = _IMG_LINK_RE.search(body)
+    if match:
+        # Return just the filename portion (security: no paths)
+        return Path(match.group(2)).name
+    return None
+
 
 def _workspace_root() -> Optional[Path]:
     """

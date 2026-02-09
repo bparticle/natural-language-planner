@@ -126,10 +126,10 @@
   }
 
   async function loadTaskDetail(taskId) {
-    if (taskDetails[taskId]) return taskDetails[taskId];
+    // Always fetch fresh detail — don't serve stale cache
     const detail = await api(`/api/task/${encodeURIComponent(taskId)}`);
     if (detail) taskDetails[taskId] = detail;
-    return detail;
+    return detail || taskDetails[taskId] || null;
   }
 
   // ── Rendering ───────────────────────────────────────────────────
@@ -233,25 +233,29 @@
       .join("");
     const desc = task.description || "";
     const deps = task.dependencies || [];
+    const banner = buildBannerUrl(task);
 
     return `
-      <div class="focus-card" data-id="${esc(task.id)}">
-        <div class="focus-card-top">
-          <div class="focus-card-title">
-            <span class="priority-dot priority-${task.priority || "medium"}"></span>
-            ${esc(task.title)}
+      <div class="focus-card ${banner ? "has-banner" : ""}" data-id="${esc(task.id)}">
+        ${banner ? `<div class="card-banner card-banner-lg"><img src="${esc(banner)}" alt="" loading="lazy" /></div>` : ""}
+        <div class="focus-card-content">
+          <div class="focus-card-top">
+            <div class="focus-card-title">
+              <span class="priority-dot priority-${task.priority || "medium"}"></span>
+              ${esc(task.title)}
+            </div>
+            <div class="focus-card-badges">
+              <span class="badge badge-sm badge-${task.status || "todo"}">${esc(task.status || "todo")}</span>
+            </div>
           </div>
-          <div class="focus-card-badges">
-            <span class="badge badge-sm badge-${task.status || "todo"}">${esc(task.status || "todo")}</span>
+          ${desc ? `<div class="focus-card-desc">${esc(desc)}</div>` : ""}
+          <div class="focus-card-footer">
+            ${task.project ? `<span class="focus-card-project">${esc(task.project)}</span>` : ""}
+            ${dueLabel ? `<span class="focus-card-due ${dueClass}">${isOverdue ? "Overdue: " : "Due "}${dueLabel}</span>` : ""}
+            ${tags}
           </div>
+          ${deps.length ? `<div class="focus-card-deps"><strong>Depends on:</strong> ${deps.map(esc).join(", ")}</div>` : ""}
         </div>
-        ${desc ? `<div class="focus-card-desc">${esc(desc)}</div>` : ""}
-        <div class="focus-card-footer">
-          ${task.project ? `<span class="focus-card-project">${esc(task.project)}</span>` : ""}
-          ${dueLabel ? `<span class="focus-card-due ${dueClass}">${isOverdue ? "Overdue: " : "Due "}${dueLabel}</span>` : ""}
-          ${tags}
-        </div>
-        ${deps.length ? `<div class="focus-card-deps"><strong>Depends on:</strong> ${deps.map(esc).join(", ")}</div>` : ""}
       </div>`;
   }
 
@@ -282,17 +286,21 @@
       .slice(0, 3)
       .map((t) => `<span class="tag">${esc(t)}</span>`)
       .join("");
+    const banner = buildBannerUrl(task);
 
     return `
-      <div class="task-card" data-id="${esc(task.id)}">
-        <div class="task-card-title">
-          <span class="priority-dot priority-${task.priority || "medium"}"></span>
-          ${esc(task.title)}
-        </div>
-        <div class="task-card-meta">
-          <span class="task-card-project">${esc(task.project || "")}</span>
-          ${dueLabel ? `<span class="task-card-due ${dueClass}">${dueLabel}</span>` : ""}
-          ${tags}
+      <div class="task-card ${banner ? "has-banner" : ""}" data-id="${esc(task.id)}">
+        ${banner ? `<div class="card-banner"><img src="${esc(banner)}" alt="" loading="lazy" /></div>` : ""}
+        <div class="task-card-body">
+          <div class="task-card-title">
+            <span class="priority-dot priority-${task.priority || "medium"}"></span>
+            ${esc(task.title)}
+          </div>
+          <div class="task-card-meta">
+            <span class="task-card-project">${esc(task.project || "")}</span>
+            ${dueLabel ? `<span class="task-card-due ${dueClass}">${dueLabel}</span>` : ""}
+            ${tags}
+          </div>
         </div>
       </div>`;
   }
@@ -664,6 +672,12 @@
   }
 
   // ── Utilities ───────────────────────────────────────────────────
+
+  function buildBannerUrl(task) {
+    if (!task.thumbnail) return "";
+    const project = task.project || "inbox";
+    return `${API_BASE}/api/attachment/${encodeURIComponent(project)}/${encodeURIComponent(task.thumbnail)}`;
+  }
 
   function esc(str) {
     if (!str) return "";
