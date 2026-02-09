@@ -115,6 +115,56 @@ Or ask the AI: *"Make my dashboard accessible from my phone."*
 > **Security note:** The dashboard has no authentication. Anyone with the
 > tunnel URL can view your tasks. Share the link carefully.
 
+## Persistent Service (Raspberry Pi / Servers)
+
+On a headless device (Raspberry Pi, home server, NAS), you can run the
+dashboard as a systemd service so it starts on boot and stays running:
+
+1. Create the service file:
+
+```bash
+sudo tee /etc/systemd/system/nlplanner-dashboard.service << 'EOF'
+[Unit]
+Description=Natural Language Planner Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/path/to/natural-language-planner
+ExecStart=/usr/bin/python3 -m scripts dashboard --network /path/to/workspace
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+2. Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable nlplanner-dashboard.service
+sudo systemctl start nlplanner-dashboard.service
+```
+
+3. Check status and logs:
+
+```bash
+systemctl status nlplanner-dashboard.service
+journalctl -u nlplanner-dashboard.service -f
+```
+
+> **Tip:** Before starting, make sure nothing else is using port 8080
+> (`sudo ss -tlnp | grep 8080`). Stale services from earlier setups are
+> a common cause of port conflicts. Check with
+> `systemctl list-units --type=service | grep dashboard`.
+
+Omit `--network` if the dashboard should only be accessible on localhost.
+
 ## Static Export
 
 Export a self-contained HTML snapshot of your dashboard for hosting on any

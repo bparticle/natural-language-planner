@@ -591,6 +591,136 @@ different Python process.  In this case:
    a different port than expected, it likely means an external process is
    holding the original port.  Alert the user.
 
+### Persistent service (systemd)
+
+On headless devices like a Raspberry Pi or home server, the user will
+typically want the dashboard to start on boot and stay running
+independently of any terminal session or agent conversation.  The
+recommended approach is a **systemd service**.
+
+#### Creating the service
+
+When the user asks to make the dashboard persistent, create a systemd
+unit file.  Adapt the paths to the actual system:
+
+```ini
+# /etc/systemd/system/nlplanner-dashboard.service
+[Unit]
+Description=Natural Language Planner Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=<USERNAME>
+WorkingDirectory=<SKILL_INSTALL_DIR>
+ExecStart=/usr/bin/python3 -m scripts dashboard --network <WORKSPACE_PATH>
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Replace the placeholders:
+
+| Placeholder | Example | How to find it |
+|---|---|---|
+| `<USERNAME>` | `sirius` | The OS user that owns the workspace files |
+| `<SKILL_INSTALL_DIR>` | `/home/sirius/.openclaw/skills/natural-language-planner` | The directory containing `scripts/` and `templates/` |
+| `<WORKSPACE_PATH>` | `/mnt/ClawFiles/nlplanner` | The `workspace_path` value from `.nlplanner/config.json` |
+
+Omit `--network` if the dashboard should only be accessible on
+`localhost`.
+
+#### Enabling and starting
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable nlplanner-dashboard.service
+sudo systemctl start nlplanner-dashboard.service
+```
+
+Verify with `systemctl status nlplanner-dashboard.service` — the log
+should show the dashboard URL and the directory it is serving from.
+
+#### Viewing logs
+
+```bash
+# Follow live logs
+journalctl -u nlplanner-dashboard.service -f
+
+# Last 50 lines
+journalctl -u nlplanner-dashboard.service -n 50
+```
+
+#### Restarting after skill updates
+
+When Python scripts change, the systemd service must be restarted for
+the running process to pick up the new code:
+
+```bash
+sudo systemctl restart nlplanner-dashboard.service
+```
+
+#### Common pitfalls
+
+1. **Port conflicts** — If another process is already bound to the
+   configured port, the dashboard will silently bump to the next
+   available port and persist that in the config (`dashboard_port`).
+   This causes "port drift."  Before starting the service, verify the
+   port is free: `sudo ss -tlnp | grep <PORT>`.  If something
+   unexpected is listening, identify and stop it first.
+
+2. **Stale services from earlier setups** — A previous attempt at a
+   dashboard (e.g. a generic `python3 -m http.server` service) may
+   still be active and holding the port.  Check for conflicting
+   services: `systemctl list-units --type=service | grep -i dashboard`.
+   Stop and remove any stale ones:
+   ```bash
+   sudo systemctl stop <old-service>
+   sudo systemctl disable <old-service>
+   sudo rm /etc/systemd/system/<old-service>.service
+   sudo systemctl daemon-reload
+   ```
+
+3. **Config edits not taking effect** — The dashboard reads the config
+   at startup and the port-drift code can overwrite manual edits.
+   Always stop the service *before* editing `config.json`, then start
+   it again.  If the workspace is on a network share (NFS/SMB), edit
+   the config from the machine running the service to avoid caching
+   issues.
+
+4. **Agent vs service restarts** — The agent's `restart_dashboard()`
+   only controls dashboard instances it started itself (in-process
+   threads).  It **cannot** restart a systemd-managed process.  When a
+   systemd service is running, the agent should tell the user to run
+   `sudo systemctl restart nlplanner-dashboard.service` instead.
+
+#### Removing the service entirely
+
+```bash
+sudo systemctl stop nlplanner-dashboard.service
+sudo systemctl disable nlplanner-dashboard.service
+sudo rm /etc/systemd/system/nlplanner-dashboard.service
+sudo systemctl daemon-reload
+```
+
+#### Rules for the agent
+
+1. **Suggest a systemd service** when the user is on a headless device
+   (Pi, server, NAS) and asks for the dashboard to run persistently or
+   survive reboots.
+2. **Check for existing services** before creating a new one — stale or
+   conflicting services are a common source of port conflicts and
+   directory-listing bugs.
+3. **Never create the service silently** — always show the user the unit
+   file contents and the commands, and let them run the `sudo` commands
+   themselves.
+4. **After creating the service**, verify it is running on the expected
+   port and serving the actual dashboard (not a directory listing).
+
 ---
 
 ## 9. Common Operations Reference
