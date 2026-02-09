@@ -521,8 +521,8 @@ rules to decide what action is needed.
 #### How to restart safely
 
 Always use `restart_dashboard()` — it preserves the current port and
-network-access setting, waits for the OS to release the port, and starts
-a fresh server instance.
+network-access setting, properly closes the server socket so the port is
+freed immediately, and starts a fresh server instance.
 
 ```python
 from scripts.dashboard_server import restart_dashboard
@@ -538,9 +538,25 @@ from scripts.dashboard_server import restart_dashboard
 url = restart_dashboard(allow_network=True)   # re-open on LAN
 ```
 
-Under the hood this calls `stop_dashboard()` → brief pause →
+Under the hood this calls `stop_dashboard()` (which closes the socket) →
 `ensure_dashboard()`.  It is safe to call even if the dashboard is not
 currently running (it simply starts a new one).
+
+#### Dealing with externally-started dashboards
+
+If the dashboard was started **outside the agent's process** — for example
+via `python -m scripts dashboard` in a terminal — the agent's
+`restart_dashboard()` cannot stop it because the server lives in a
+different Python process.  In this case:
+
+1. **Ask the user to stop the terminal process** (Ctrl+C in the terminal
+   where `python -m scripts dashboard` is running).
+2. **Then** call `ensure_dashboard()` or `restart_dashboard()` to start a
+   fresh instance under the agent's control.
+3. If the user can't or won't stop the external process, the agent's
+   `ensure_dashboard()` will automatically find the next available port —
+   but mention that the original instance is still running and the user
+   should eventually stop it to avoid confusion.
 
 #### Rules for the agent
 
@@ -550,9 +566,12 @@ currently running (it simply starts a new one).
    refresh in the browser may be needed if they don't see the update.
 3. **Never restart mid-operation** — finish any in-flight task writes and
    `rebuild_index()` calls first, then restart.
-4. **Confirm the restart** to the user:
+4. **Confirm the restart** to the user, and verify the port is unchanged:
    > "The dashboard has been restarted to pick up the latest changes.
    > It's live at http://localhost:8080."
+5. **Watch for port drift** — if `restart_dashboard()` returns a URL with
+   a different port than expected, it likely means an external process is
+   holding the original port.  Alert the user.
 
 ---
 

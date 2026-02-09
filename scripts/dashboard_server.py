@@ -407,14 +407,15 @@ def ensure_dashboard(port: Optional[int] = None, allow_network: Optional[bool] =
 
 
 def stop_dashboard() -> None:
-    """Stop the running dashboard server."""
+    """Stop the running dashboard server and release its port."""
     global _server, _thread, _started_at
 
     if _server is None:
         logger.info("Dashboard is not running.")
         return
 
-    _server.shutdown()
+    _server.shutdown()       # Stop the serve_forever() loop
+    _server.server_close()   # Close the socket — releases the port immediately
     _server = None
     _thread = None
     _started_at = 0.0
@@ -423,11 +424,12 @@ def stop_dashboard() -> None:
 
 def restart_dashboard(allow_network: Optional[bool] = None) -> str:
     """
-    Stop and restart the dashboard server.
+    Stop and restart the dashboard server on the **same port**.
 
     Use this after skill updates that change Python scripts, dashboard
     templates, or any other server-side code.  It fully tears down the
-    existing server and starts a fresh one, re-resolving the dashboard
+    existing server (including closing the socket so the port is freed
+    immediately) and starts a fresh one, re-resolving the dashboard
     directory and reloading configuration.
 
     Args:
@@ -444,8 +446,6 @@ def restart_dashboard(allow_network: Optional[bool] = None) -> str:
     """
     port = get_dashboard_port() or None
     stop_dashboard()
-    # Brief pause to ensure the port is released by the OS
-    time.sleep(0.3)
     return ensure_dashboard(port=port, allow_network=allow_network)
 
 
