@@ -1,4 +1,6 @@
 ---
+slug: natural-language-planner
+displayName: Natural Language Planner
 name: natural-language-planner
 description: >
   Natural language task and project management. Use when the user talks about
