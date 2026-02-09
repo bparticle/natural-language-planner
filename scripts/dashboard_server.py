@@ -135,7 +135,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self._json_response(results)
 
     def _api_due_soon(self, params: dict) -> None:
-        days = int(params.get("days", ["7"])[0])
+        try:
+            days = max(1, min(365, int(params.get("days", ["7"])[0])))
+        except (ValueError, TypeError):
+            days = 7
         rebuild_index()
         self._json_response(get_tasks_due_soon(days))
 
@@ -158,18 +161,34 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._json_response({"error": "Task not found"}, status=404)
 
     def _api_serve_attachment(self, project_id: str, filename: str) -> None:
-        """Serve a file from a project's attachments/ directory."""
+        """Serve a file from project attachments or media directory."""
         config = load_config()
         ws = config.get("workspace_path", "")
         if not ws:
             self._json_response({"error": "Workspace not configured"}, status=500)
             return
 
-        # Security: prevent path traversal
+        # Security: prevent path traversal in both project_id and filename
+        safe_project = Path(project_id).name
         safe_name = Path(filename).name
-        file_path = Path(ws) / "projects" / project_id / "attachments" / safe_name
+        ws_root = Path(ws).resolve()
 
-        if not file_path.is_file():
+        # Check both locations (backwards compat + new media dir)
+        paths_to_try = [
+            (ws_root / "projects" / safe_project / "attachments" / safe_name).resolve(),
+            (ws_root / "media" / safe_project / safe_name).resolve(),
+        ]
+
+        file_path = None
+        for candidate in paths_to_try:
+            # Ensure the resolved path is still within the workspace
+            if not candidate.is_relative_to(ws_root):
+                continue
+            if candidate.is_file():
+                file_path = candidate
+                break
+
+        if not file_path:
             self._json_response({"error": "Attachment not found"}, status=404)
             return
 
@@ -181,7 +200,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Cache-Control", "public, max-age=10")
             self.end_headers()
             self.wfile.write(data)
@@ -197,7 +215,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
 
@@ -228,8 +245,10 @@ def _resolve_dashboard_dir() -> str:
     if (templates / "index.html").exists():
         return str(templates)
 
-    logger.warning("Dashboard files not found. Serving from current directory.")
-    return "."
+    raise FileNotFoundError(
+        "Dashboard static files not found. Ensure the templates/dashboard/ "
+        "directory exists or run init_workspace() first."
+    )
 
 
 def _is_port_available(host: str, port: int) -> bool:
@@ -327,7 +346,11 @@ def start_dashboard(port: Optional[int] = None, allow_network: Optional[bool] = 
         allow_network = config.get("settings", {}).get("dashboard_allow_network", False)
 
     host = "0.0.0.0" if allow_network else "127.0.0.1"
-    dashboard_dir = _resolve_dashboard_dir()
+    try:
+        dashboard_dir = _resolve_dashboard_dir()
+    except FileNotFoundError as e:
+        logger.error("%s", e)
+        return ""
     handler = partial(DashboardHandler, dashboard_dir=dashboard_dir)
 
     # Try the configured port first, then search for an available one

@@ -20,6 +20,7 @@ from .utils import (
     ensure_directory,
     safe_read_file,
     safe_write_file,
+    safe_child_path,
     validate_status,
     validate_priority,
 )
@@ -176,7 +177,10 @@ def create_project(
         return None
 
     project_id = generate_slug(name)
-    project_dir = root / "projects" / project_id
+    project_dir = safe_child_path(root, "projects", project_id)
+    if project_dir is None:
+        logger.error("Generated project slug '%s' is invalid.", project_id)
+        return None
 
     if project_dir.exists():
         logger.warning("Project directory '%s' already exists.", project_id)
@@ -227,7 +231,9 @@ def get_project(project_id: str) -> Optional[dict[str, Any]]:
     if root is None:
         return None
 
-    readme = root / "projects" / project_id / "README.md"
+    readme = safe_child_path(root, "projects", project_id, "README.md")
+    if readme is None:
+        return None
     raw = safe_read_file(readme)
     if raw is None:
         return None
@@ -292,7 +298,10 @@ def update_project(project_id: str, updates: dict[str, Any]) -> bool:
     if root is None:
         return False
 
-    readme = root / "projects" / project_id / "README.md"
+    readme = safe_child_path(root, "projects", project_id, "README.md")
+    if readme is None:
+        logger.error("Invalid project ID '%s'.", project_id)
+        return False
     raw = safe_read_file(readme)
     if raw is None:
         logger.error("Project '%s' not found.", project_id)
@@ -320,8 +329,11 @@ def archive_project(project_id: str) -> bool:
     if root is None:
         return False
 
-    src = root / "projects" / project_id
-    dst = root / "archive" / project_id
+    src = safe_child_path(root, "projects", project_id)
+    dst = safe_child_path(root, "archive", project_id)
+    if src is None or dst is None:
+        logger.error("Invalid project ID '%s'.", project_id)
+        return False
 
     if not src.exists():
         logger.error("Project '%s' not found for archiving.", project_id)
@@ -382,7 +394,10 @@ def create_task(
     details = details or {}
 
     # Resolve the task directory
-    task_dir = root / "projects" / project_id / "tasks"
+    task_dir = safe_child_path(root, "projects", project_id, "tasks")
+    if task_dir is None:
+        logger.error("Invalid project ID '%s'.", project_id)
+        return None
     if not task_dir.exists():
         logger.error("Project '%s' not found.", project_id)
         return None
@@ -589,7 +604,10 @@ def archive_task(task_id: str) -> bool:
 
     # Determine archive location
     project_id = meta.get("project", "inbox")
-    archive_dir = root / "archive" / project_id / "tasks"
+    archive_dir = safe_child_path(root, "archive", project_id, "tasks")
+    if archive_dir is None:
+        logger.error("Invalid project ID '%s' in task metadata.", project_id)
+        return False
     ensure_directory(archive_dir)
 
     archive_path = archive_dir / path.name
@@ -627,7 +645,10 @@ def add_attachment(project_id: str, file_path: str, new_name: Optional[str] = No
         logger.error("Attachment source '%s' not found.", file_path)
         return None
 
-    attachments_dir = root / "projects" / project_id / "attachments"
+    attachments_dir = safe_child_path(root, "projects", project_id, "attachments")
+    if attachments_dir is None:
+        logger.error("Invalid project ID '%s'.", project_id)
+        return None
     ensure_directory(attachments_dir)
 
     dest_name = new_name or src.name
@@ -701,7 +722,10 @@ def move_task(task_id: str, target_project_id: str) -> bool:
         logger.error("Task '%s' not found.", task_id)
         return False
 
-    target_dir = root / "projects" / target_project_id / "tasks"
+    target_dir = safe_child_path(root, "projects", target_project_id, "tasks")
+    if target_dir is None:
+        logger.error("Invalid target project ID '%s'.", target_project_id)
+        return False
     if not target_dir.exists():
         logger.error("Target project '%s' not found.", target_project_id)
         return False
@@ -853,8 +877,11 @@ def _workspace_root() -> Optional[Path]:
     """
     Resolve and return the workspace root from config.
 
+    The returned path is always fully resolved so that security checks
+    using ``Path.is_relative_to()`` work correctly.
+
     Returns:
-        Path to workspace root, or None if not configured.
+        Resolved path to workspace root, or None if not configured.
     """
     config = load_config()
     ws = config.get("workspace_path", "")
@@ -863,7 +890,7 @@ def _workspace_root() -> Optional[Path]:
             "Workspace path not configured. Run init_workspace() first."
         )
         return None
-    return Path(ws)
+    return Path(ws).resolve()
 
 
 def _find_task_file(task_id: str) -> Optional[Path]:

@@ -353,6 +353,20 @@ update_task("task-001", {"body": body})
    > **Design homepage layout**. You can see it in the task details on
    > the dashboard."
 
+### Attachment storage locations
+
+Attachments can be stored in **either** of two locations — both are served
+via the same `/api/attachment/<project_id>/<filename>` endpoint:
+
+| Location | Notes |
+|---|---|
+| `projects/<project_id>/attachments/` | Original / backwards-compatible path |
+| `media/<project_id>/` | New preferred location for media files |
+
+The server checks the `attachments/` directory first, then falls back to
+`media/`. You don't need to move existing files — both paths work
+transparently.
+
 ### Supported image formats
 PNG, JPG, JPEG, GIF, WebP, SVG, BMP — all displayed inline in the gallery.
 

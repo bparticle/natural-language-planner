@@ -231,6 +231,32 @@ def safe_write_file(path: Path, content: str) -> bool:
         return False
 
 
+def safe_child_path(root: Path, *segments: str) -> Optional[Path]:
+    """Construct a path from *root* + *segments* and verify it stays inside *root*.
+
+    Returns the resolved ``Path`` if the result is inside *root*, or
+    ``None`` if any segment (e.g. containing ``..``) would escape it.
+    This prevents path-traversal attacks when IDs come from untrusted
+    input such as URL parameters or user-supplied project/task names.
+
+    Args:
+        root: The trusted base directory (must already be resolved).
+        *segments: One or more path components to join.
+
+    Returns:
+        Resolved ``Path`` inside *root*, or ``None`` on traversal.
+    """
+    try:
+        target = root.joinpath(*segments).resolve()
+        # is_relative_to is available in Python 3.9+
+        if target.is_relative_to(root):
+            return target
+    except (ValueError, OSError):
+        pass
+    logger.warning("Path traversal blocked: %s / %s", root, segments)
+    return None
+
+
 def validate_status(status: str) -> bool:
     """Check if a status value is valid for tasks."""
     return status in ("todo", "in-progress", "done", "archived")

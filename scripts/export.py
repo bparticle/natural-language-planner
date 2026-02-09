@@ -106,6 +106,16 @@ def _read_file(path: Path) -> Optional[str]:
         return None
 
 
+def _escape_json_for_html(json_str: str) -> str:
+    """Escape a JSON string so it is safe to embed inside an HTML <script> block.
+
+    Prevents ``</script>`` and ``<!--`` sequences in the data from breaking
+    out of the surrounding ``<script>`` tag.  These replacements produce
+    strings that are still valid JavaScript string literals.
+    """
+    return json_str.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+
+
 def _build_static_js(original_js: str, data: dict) -> str:
     """
     Transform the dashboard JS for static/offline use.
@@ -113,7 +123,9 @@ def _build_static_js(original_js: str, data: dict) -> str:
     Replaces the API fetch logic with a pre-loaded data blob so the
     dashboard works as a standalone file without a running server.
     """
-    data_json = json.dumps(data, default=str, ensure_ascii=False)
+    data_json = _escape_json_for_html(
+        json.dumps(data, default=str, ensure_ascii=False)
+    )
 
     # Prepend the inlined data and override the api() and loadAll() functions
     static_preamble = f"""
