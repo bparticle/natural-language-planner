@@ -22,6 +22,10 @@
   let currentView = "focus";   // Default to This Week view
   let pollTimer = null;
 
+  // Maps: project-id → hex colour, project-id → [tags]
+  let projectColorMap = {};
+  let projectTagsMap = {};
+
   // ── DOM helpers ─────────────────────────────────────────────────
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
@@ -122,7 +126,54 @@
     if (s) stats = s;
     if (p) allProjects = p;
     if (t) allTasks = t;
+    buildProjectMaps();
     render();
+  }
+
+  /**
+   * Build lookup maps from project data so that tags and cards
+   * throughout the dashboard can be colour-coded to match their
+   * parent project.
+   */
+  function buildProjectMaps() {
+    projectColorMap = {};
+    projectTagsMap = {};
+    for (const p of allProjects) {
+      const pid = p.id || p.title;
+      if (p.color) projectColorMap[pid] = p.color;
+      if (p.tags) projectTagsMap[pid] = p.tags;
+    }
+  }
+
+  /**
+   * Return the project colour for a given project ID, or "" if none.
+   */
+  function getProjectColor(projectId) {
+    return projectColorMap[projectId] || "";
+  }
+
+  /**
+   * Given a tag name, find the colour of the project that owns it.
+   * If multiple projects share the same tag, the first match wins.
+   */
+  function getTagColor(tag) {
+    for (const p of allProjects) {
+      const pid = p.id || p.title;
+      if ((p.tags || []).includes(tag) && p.color) return p.color;
+    }
+    return "";
+  }
+
+  /**
+   * Render a tag span, optionally coloured to its owning project.
+   */
+  function tagHTML(tagName, projectId) {
+    // Try project-specific colour first, then fall back to tag lookup
+    const color = (projectId && getProjectColor(projectId)) || getTagColor(tagName);
+    if (color) {
+      return `<span class="tag" style="color:${esc(color)};background:${esc(color)}18">${esc(tagName)}</span>`;
+    }
+    return `<span class="tag">${esc(tagName)}</span>`;
   }
 
   async function loadTaskDetail(taskId) {
@@ -229,14 +280,16 @@
     const dueClass = isOverdue ? "overdue" : "";
     const tags = (task.tags || [])
       .slice(0, 4)
-      .map((t) => `<span class="tag">${esc(t)}</span>`)
+      .map((t) => tagHTML(t, task.project))
       .join("");
     const desc = task.description || "";
     const deps = task.dependencies || [];
     const banner = buildBannerUrl(task);
+    const pColor = getProjectColor(task.project);
+    const borderStyle = pColor ? `style="border-left:3px solid ${esc(pColor)}"` : "";
 
     return `
-      <div class="focus-card ${banner ? "has-banner" : ""}" data-id="${esc(task.id)}">
+      <div class="focus-card ${banner ? "has-banner" : ""}" data-id="${esc(task.id)}" ${borderStyle}>
         ${banner ? `<div class="card-banner card-banner-lg"><img src="${esc(banner)}" alt="" loading="lazy" /></div>` : ""}
         <div class="focus-card-content">
           <div class="focus-card-top">
@@ -284,12 +337,14 @@
     const dueLabel = task.due ? formatDate(task.due) : "";
     const tags = (task.tags || [])
       .slice(0, 3)
-      .map((t) => `<span class="tag">${esc(t)}</span>`)
+      .map((t) => tagHTML(t, task.project))
       .join("");
     const banner = buildBannerUrl(task);
+    const pColor = getProjectColor(task.project);
+    const borderStyle = pColor ? `style="border-left:3px solid ${esc(pColor)}"` : "";
 
     return `
-      <div class="task-card ${banner ? "has-banner" : ""}" data-id="${esc(task.id)}">
+      <div class="task-card ${banner ? "has-banner" : ""}" data-id="${esc(task.id)}" ${borderStyle}>
         ${banner ? `<div class="card-banner"><img src="${esc(banner)}" alt="" loading="lazy" /></div>` : ""}
         <div class="task-card-body">
           <div class="task-card-title">
@@ -327,12 +382,19 @@
         const todoCount = tasks.filter((t) => t.status === "todo").length;
         const progressCount = tasks.filter((t) => t.status === "in-progress").length;
         const doneCount = tasks.filter((t) => t.status === "done").length;
+        const pColor = p.color || "";
         const tags = (p.tags || [])
-          .map((t) => `<span class="tag">${esc(t)}</span>`)
+          .map((t) => {
+            if (pColor) {
+              return `<span class="tag" style="color:${esc(pColor)};background:${esc(pColor)}18">${esc(t)}</span>`;
+            }
+            return `<span class="tag">${esc(t)}</span>`;
+          })
           .join("");
+        const borderStyle = pColor ? `style="border-left:3px solid ${esc(pColor)}"` : "";
 
         return `
-          <div class="project-card">
+          <div class="project-card" ${borderStyle}>
             <div class="project-card-title">${esc(p.title || pid)}</div>
             <div class="project-card-status">${esc(p.status || "active")}</div>
             <div class="project-card-counts">
@@ -373,12 +435,18 @@
           <div class="timeline-date">${formatDate(dateStr)}${isOverdue(dateStr) ? ' <span style="color:var(--red)">(overdue)</span>' : ""}</div>
           ${tasks
             .map(
-              (t) => `
+              (t) => {
+                const tc = getProjectColor(t.project);
+                const dotAttr = tc
+                  ? `class="priority-dot" style="background:${esc(tc)}"`
+                  : `class="priority-dot priority-${t.priority || "medium"}"`;
+                return `
             <div class="timeline-item" data-id="${esc(t.id)}">
-              <span class="priority-dot priority-${t.priority || "medium"}"></span>
+              <span ${dotAttr}></span>
               <span class="timeline-item-title">${esc(t.title)}</span>
               <span class="timeline-item-project">${esc(t.project || "")}</span>
-            </div>`
+            </div>`;
+              }
             )
             .join("")}
         </div>`
@@ -459,7 +527,7 @@
     els.modalCreated.textContent = task.created ? `Created: ${formatDate(task.created)}` : "";
 
     els.modalTags.innerHTML = (task.tags || [])
-      .map((t) => `<span class="tag">${esc(t)}</span>`)
+      .map((t) => tagHTML(t, task.project))
       .join("");
 
     // Body — extract description and other sections from full detail

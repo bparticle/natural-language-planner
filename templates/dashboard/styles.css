@@ -470,11 +470,17 @@ body.dark .theme-toggle .icon-moon { display: none; }
   padding: 12px 14px;
   cursor: pointer;
   transition: box-shadow var(--transition), border-color var(--transition);
+  /* border-left is set via inline style from project color */
 }
 
 .task-card:hover {
   border-color: var(--border);
   box-shadow: var(--shadow);
+}
+
+/* Keep padding consistent when the coloured left border is applied */
+.task-card[style*="border-left"] {
+  padding-left: 12px;
 }
 
 .task-card-title {
@@ -567,6 +573,7 @@ body.dark .theme-toggle .icon-moon { display: none; }
   background: var(--blue-light);
   color: var(--blue);
   font-weight: 500;
+  /* Inline style overrides come from project colours */
 }
 
 /* ── Projects grid ─────────────────────────────────────────────── */
@@ -583,10 +590,17 @@ body.dark .theme-toggle .icon-moon { display: none; }
   padding: 20px;
   cursor: default;
   transition: box-shadow var(--transition);
+  /* border-left is set via inline style from project color */
 }
 
 .project-card:hover {
   box-shadow: var(--shadow);
+}
+
+/* When a project-card has an inline border-left, ensure padding
+   compensates so content doesn't jump compared to un-coloured cards */
+.project-card[style*="border-left"] {
+  padding-left: 18px;
 }
 
 .project-card-title {

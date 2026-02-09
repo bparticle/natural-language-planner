@@ -275,6 +275,21 @@ def _resolve_host() -> str:
     return "0.0.0.0" if allow_network else "127.0.0.1"
 
 
+def _get_lan_ip() -> str:
+    """Best-effort detection of the machine's LAN IP address.
+
+    Returns ``"127.0.0.1"`` if the address cannot be determined (e.g.
+    no network interfaces are up).
+    """
+    try:
+        # Open a UDP socket to an external address (nothing is actually sent)
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+
+
 # ── Public functions ──────────────────────────────────────────────
 
 def start_dashboard(port: Optional[int] = None, allow_network: Optional[bool] = None) -> str:
@@ -336,7 +351,11 @@ def start_dashboard(port: Optional[int] = None, allow_network: Optional[bool] = 
     _thread = threading.Thread(target=_server.serve_forever, daemon=True)
     _thread.start()
 
-    url = f"http://localhost:{actual_port}"
+    if allow_network:
+        lan_ip = _get_lan_ip()
+        url = f"http://{lan_ip}:{actual_port}"
+    else:
+        url = f"http://localhost:{actual_port}"
     logger.info("Dashboard started at %s (serving from %s)", url, dashboard_dir)
 
     # Persist the actual port so subsequent calls know where it is
@@ -346,7 +365,7 @@ def start_dashboard(port: Optional[int] = None, allow_network: Optional[bool] = 
     return url
 
 
-def ensure_dashboard(port: Optional[int] = None) -> str:
+def ensure_dashboard(port: Optional[int] = None, allow_network: Optional[bool] = None) -> str:
     """
     Ensure the dashboard is running and healthy.
 
@@ -357,6 +376,9 @@ def ensure_dashboard(port: Optional[int] = None) -> str:
 
     Args:
         port: Optional port override.
+        allow_network: If True, bind to all interfaces (``0.0.0.0``)
+                       so the dashboard is reachable from other devices
+                       on the LAN.  If None, reads from config.
 
     Returns:
         The dashboard URL, or empty string on failure.
@@ -369,7 +391,7 @@ def ensure_dashboard(port: Optional[int] = None) -> str:
     if is_running():
         return get_dashboard_url()
 
-    url = start_dashboard(port=port)
+    url = start_dashboard(port=port, allow_network=allow_network)
     if not url:
         return ""
 
@@ -399,9 +421,41 @@ def stop_dashboard() -> None:
     logger.info("Dashboard stopped.")
 
 
+def restart_dashboard(allow_network: Optional[bool] = None) -> str:
+    """
+    Stop and restart the dashboard server.
+
+    Use this after skill updates that change Python scripts, dashboard
+    templates, or any other server-side code.  It fully tears down the
+    existing server and starts a fresh one, re-resolving the dashboard
+    directory and reloading configuration.
+
+    Args:
+        allow_network: If True, bind to all interfaces (``0.0.0.0``).
+                       If None, reads from config.
+
+    Returns:
+        The new dashboard URL, or empty string on failure.
+
+    Example:
+        >>> url = restart_dashboard()
+        >>> print(url)
+        http://localhost:8080
+    """
+    port = get_dashboard_port() or None
+    stop_dashboard()
+    # Brief pause to ensure the port is released by the OS
+    time.sleep(0.3)
+    return ensure_dashboard(port=port, allow_network=allow_network)
+
+
 def get_dashboard_url() -> str:
     """
     Get the URL of the running dashboard.
+
+    When the server is bound to all interfaces (``0.0.0.0``), returns
+    the LAN IP so the URL is directly usable from other devices on the
+    network.  When bound to ``127.0.0.1``, returns ``localhost``.
 
     Returns:
         The dashboard URL, or an empty string if not running.
@@ -409,6 +463,8 @@ def get_dashboard_url() -> str:
     if _server is None:
         return ""
     host, port = _server.server_address
+    if host == "0.0.0.0":
+        return f"http://{_get_lan_ip()}:{port}"
     return f"http://localhost:{port}"
 
 

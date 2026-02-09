@@ -155,6 +155,7 @@ title: string
 created: YYYY-MM-DD
 status: active | archived
 tags: [string]
+color: '#hex'         # Accent colour — auto-assigned from palette, user-overridable
 ```
 
 ## Error Handling Strategy
@@ -171,7 +172,9 @@ tags: [string]
 - All paths use `pathlib.Path` — forward/backward slashes handled automatically.
 - `~` expansion via `Path.expanduser()`.
 - File encoding is always UTF-8.
-- The dashboard binds to `127.0.0.1` (not `0.0.0.0`) for security.
+- The dashboard binds to `127.0.0.1` by default. Set
+  `dashboard_allow_network` to `true` to bind to `0.0.0.0` (all
+  interfaces) for LAN access on headless / remote devices.
 
 ## Extension Points
 
@@ -193,7 +196,9 @@ The architecture is designed to be extended:
 
 ## Security
 
-- Dashboard runs on `127.0.0.1` only (not accessible from network).
-- No authentication (it's local-only).
+- Dashboard runs on `127.0.0.1` by default (not accessible from network).
+  When `dashboard_allow_network` is enabled it binds to `0.0.0.0`.
+- No authentication — when network access is enabled, anyone on the LAN
+  can view the dashboard.
 - No data leaves the machine.
 - File operations are confined to the workspace directory.

@@ -27,6 +27,52 @@ from .config_manager import load_config, save_config, set_config_path
 
 logger = logging.getLogger("nlplanner.files")
 
+# ── Project colour palette ─────────────────────────────────────────
+# A curated set of accent colours that work well in both light and
+# dark mode.  When a new project is created, the next unused colour
+# is assigned automatically.  The user can override it later.
+
+PROJECT_COLOUR_PALETTE = [
+    "#84cc16",  # lime
+    "#ef4444",  # red
+    "#38bdf8",  # sky
+    "#a78bfa",  # purple
+    "#eab308",  # yellow
+    "#ec4899",  # pink
+    "#14b8a6",  # teal
+    "#f97316",  # orange
+    "#6366f1",  # indigo
+    "#06b6d4",  # cyan
+    "#f43f5e",  # rose
+    "#10b981",  # emerald
+]
+
+
+def _next_project_colour(root: Path) -> str:
+    """Pick the next unused colour from the palette.
+
+    Scans existing projects to see which colours are already taken and
+    returns the first unused one.  If all colours have been used, it
+    cycles back to the beginning.
+    """
+    used: set[str] = set()
+    projects_dir = root / "projects"
+    if projects_dir.exists():
+        for readme in projects_dir.glob("*/README.md"):
+            raw = safe_read_file(readme)
+            if raw:
+                meta, _ = parse_frontmatter(raw)
+                c = meta.get("color", "")
+                if c:
+                    used.add(c.lower())
+
+    for colour in PROJECT_COLOUR_PALETTE:
+        if colour.lower() not in used:
+            return colour
+
+    # All taken — cycle based on total project count
+    return PROJECT_COLOUR_PALETTE[len(used) % len(PROJECT_COLOUR_PALETTE)]
+
 
 # ── Workspace initialisation ───────────────────────────────────────
 
@@ -84,6 +130,7 @@ def init_workspace(workspace_path: str) -> bool:
             "created": today_str(),
             "status": "active",
             "tags": [],
+            "color": _next_project_colour(root),
         }
         body = (
             "## Description\n"
@@ -104,6 +151,7 @@ def create_project(
     description: str = "",
     tags: Optional[list[str]] = None,
     goals: Optional[list[str]] = None,
+    color: Optional[str] = None,
 ) -> Optional[str]:
     """
     Create a new project.
@@ -113,6 +161,8 @@ def create_project(
         description: Optional longer description.
         tags: Optional list of tag strings.
         goals: Optional list of project goals.
+        color: Optional hex colour for the project accent (e.g. ``"#84cc16"``).
+               If not provided, one is picked automatically from the palette.
 
     Returns:
         The project ID (slug) on success, or None on failure.
@@ -136,12 +186,17 @@ def create_project(
     ensure_directory(project_dir / "tasks")
     ensure_directory(project_dir / "attachments")
 
+    # Auto-assign a colour from the palette if none was given
+    if not color:
+        color = _next_project_colour(root)
+
     meta: dict[str, Any] = {
         "id": project_id,
         "title": name,
         "created": today_str(),
         "status": "active",
         "tags": tags or [],
+        "color": color,
     }
 
     body_parts = []

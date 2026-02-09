@@ -383,6 +383,26 @@ automatically.
 4. **Port recovery** — If the configured port is occupied (e.g. from a
    previous session), `ensure_dashboard()` automatically tries the next
    ports and persists the one it finds.
+5. **LAN / network access** — When the user is accessing the assistant
+   from a different device than the one running the planner (e.g. a
+   Raspberry Pi, home server, remote machine, or any headless setup),
+   enable network access so the dashboard is reachable from the local
+   network.  Either pass `allow_network=True` to `ensure_dashboard()`,
+   or set the config once with `set_setting("dashboard_allow_network", True)`.
+   When network mode is active, `ensure_dashboard()` returns a URL with
+   the machine's LAN IP (e.g. `http://192.168.0.172:8080`) instead of
+   `localhost`.
+
+   **When to enable network access automatically:**
+   - The agent is running on a device the user accesses remotely (Pi,
+     server, NAS, etc.)
+   - The user mentions wanting to open the dashboard on their phone,
+     tablet, or another computer on the same network
+   - The user shares a LAN IP or hostname rather than `localhost`
+
+   **Security note:** The dashboard has no authentication. When network
+   access is enabled, anyone on the same network can view the tasks.
+   Mention this once when first enabling it.
 
 ```python
 from scripts.dashboard_server import ensure_dashboard
@@ -390,6 +410,9 @@ from scripts.index_manager import rebuild_index
 
 # Always use ensure_dashboard() — safe to call repeatedly
 url = ensure_dashboard()  # Returns "http://localhost:8080"
+
+# On a headless / remote device, enable network access:
+url = ensure_dashboard(allow_network=True)  # Returns "http://192.168.0.172:8080"
 
 # After any write operation, rebuild the index
 rebuild_index()
@@ -400,7 +423,12 @@ rebuild_index()
 - **This Week** (default view): Focus cards showing what's active this week,
   with descriptions, context, dependencies, and status badges
 - **Kanban board**: Columns for To Do, In Progress, Done
-- **Project cards**: Shows each project with task counts
+- **Project cards**: Shows each project with task counts, colour-coded left
+  border, and colour-matched tags
+- **Colour-coded projects**: Each project is auto-assigned an accent colour
+  from a curated palette. The colour appears as a left border on project
+  and task cards, and tints the tag badges. Users can request a different
+  colour at any time.
 - **Timeline**: Visual list of upcoming due dates
 - **Search**: Find tasks by keyword
 - **Task detail modal**: Click any task to see full details, context, and notes
@@ -475,6 +503,57 @@ path = export_dashboard(output_dir="./docs")
 4. For automated freshness, suggest a git hook or cron job that re-runs the
    export.
 
+### Handling skill updates (hot-reload & restart)
+
+When the skill's source files are updated — UI templates, Python scripts, or
+configuration — the running dashboard must pick up the changes.  Follow these
+rules to decide what action is needed.
+
+#### What changed → what to do
+
+| Changed files | Action required | Why |
+|---|---|---|
+| **Dashboard templates** (`templates/dashboard/*.html`, `*.css`, `*.js`) | **Usually nothing** — the server reads static files from disk on every request, so the browser picks up changes on the next page load.  If the browser cached an old version, a **hard refresh** (Ctrl+Shift+R / Cmd+Shift+R) is enough. | `SimpleHTTPRequestHandler` serves files straight from the filesystem. |
+| **Python scripts** (`scripts/*.py`) | **Restart the dashboard.** Python modules are loaded once into memory; a running server thread will not see updated code until it is restarted. | Module code is cached by the Python interpreter. |
+| **Configuration defaults** (`config_manager.py` default values) | **Restart the dashboard**, then call `load_config()` to merge new defaults. | The config is read once at startup and cached. |
+| **Skill instructions** (`SKILL.md`) only | **No server action needed.** The SKILL.md is read by the AI agent, not by the running server. | The file is an agent prompt, not runtime code. |
+
+#### How to restart safely
+
+Always use `restart_dashboard()` — it preserves the current port and
+network-access setting, waits for the OS to release the port, and starts
+a fresh server instance.
+
+```python
+from scripts.dashboard_server import restart_dashboard
+
+# Restart after a skill update (preserves port & network settings)
+url = restart_dashboard()
+```
+
+If you need to force a specific configuration:
+
+```python
+from scripts.dashboard_server import restart_dashboard
+url = restart_dashboard(allow_network=True)   # re-open on LAN
+```
+
+Under the hood this calls `stop_dashboard()` → brief pause →
+`ensure_dashboard()`.  It is safe to call even if the dashboard is not
+currently running (it simply starts a new one).
+
+#### Rules for the agent
+
+1. **After pulling / syncing skill updates**, check whether any Python
+   scripts changed.  If so, call `restart_dashboard()` once.
+2. **After UI-only template changes**, mention to the user that a hard
+   refresh in the browser may be needed if they don't see the update.
+3. **Never restart mid-operation** — finish any in-flight task writes and
+   `rebuild_index()` calls first, then restart.
+4. **Confirm the restart** to the user:
+   > "The dashboard has been restarted to pick up the latest changes.
+   > It's live at http://localhost:8080."
+
 ---
 
 ## 9. Common Operations Reference
@@ -487,9 +566,26 @@ project_id = create_project(
     "Website Redesign",
     description="Modernise the company website with new branding",
     tags=["design", "frontend"],
-    goals=["New landing page", "Mobile-responsive", "Improved performance"]
+    goals=["New landing page", "Mobile-responsive", "Improved performance"],
+    # color is auto-assigned from a curated palette — omit it unless
+    # the user specifically asks for a colour.  To set one explicitly:
+    # color="#3b82f6",
 )
 ```
+
+### Change a project's colour
+
+The agent picks a colour automatically when creating a project.  If the
+user asks to change it, use `update_project`:
+
+```python
+from scripts.file_manager import update_project
+update_project("website-redesign", {"color": "#ec4899"})   # pink
+```
+
+The colour is used throughout the dashboard: left border on project and
+task cards, and as the tint for tag badges.  Any valid CSS hex colour
+(e.g. `#ef4444`, `#84cc16`) works.
 
 ### Create a task
 
@@ -576,6 +672,7 @@ Settings are stored in `.nlplanner/config.json`. The user can adjust:
 | `auto_archive_completed_days` | 30 | Auto-archive tasks done for N days |
 | `default_priority` | `"medium"` | Priority for tasks without explicit priority |
 | `dashboard_port` | 8080 | Port for the local dashboard server |
+| `dashboard_allow_network` | `false` | Bind to `0.0.0.0` instead of `localhost` so the dashboard is reachable from other devices on the LAN. Enable this on headless / remote setups (Pi, server, etc.) |
 
 ```python
 from scripts.config_manager import set_setting, get_setting
