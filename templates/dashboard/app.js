@@ -16,6 +16,7 @@
 
   // ── State ───────────────────────────────────────────────────────
   let allTasks = [];
+  let archivedTasks = [];
   let allProjects = [];
   let stats = {};
   let taskDetails = {};        // Cache of full task bodies keyed by id
@@ -58,6 +59,9 @@
     projectsGrid: $("#projects-grid"),
     // Timeline
     timeline: $("#timeline"),
+    // Archive
+    archiveList: $("#archive-list"),
+    archiveCount: $("#archive-count"),
     // Search
     viewSearch: $("#view-search"),
     searchResults: $("#search-results"),
@@ -118,14 +122,17 @@
   // ── Data loading ────────────────────────────────────────────────
 
   async function loadAll() {
-    const [s, p, t] = await Promise.all([
+    const [s, p, t, a] = await Promise.all([
       api("/api/stats"),
       api("/api/projects"),
       api("/api/tasks"),
+      api("/api/tasks?include_archived=true"),
     ]);
     if (s) stats = s;
     if (p) allProjects = p;
     if (t) allTasks = t;
+    // Archived tasks = everything from the include_archived call that has status "archived"
+    if (a) archivedTasks = a.filter((task) => task.status === "archived");
     buildProjectMaps();
     render();
   }
@@ -191,6 +198,7 @@
     renderBoard();
     renderProjects();
     renderTimeline();
+    renderArchive();
   }
 
   function renderStats() {
@@ -458,6 +466,86 @@
     });
   }
 
+  // ── Archive ─────────────────────────────────────────────────────
+
+  function renderArchive() {
+    if (!archivedTasks.length) {
+      els.archiveCount.textContent = "";
+      els.archiveList.innerHTML =
+        '<p class="archive-empty">No archived tasks yet. Completed tasks will appear here once archived.</p>';
+      return;
+    }
+
+    els.archiveCount.textContent = `${archivedTasks.length} task${archivedTasks.length === 1 ? "" : "s"}`;
+
+    // Sort by done/updated date descending (most recently archived first),
+    // fall back to created date
+    const sorted = [...archivedTasks].sort((a, b) => {
+      const dateA = a.done_date || a.updated || a.created || "";
+      const dateB = b.done_date || b.updated || b.created || "";
+      return dateB > dateA ? 1 : dateB < dateA ? -1 : 0;
+    });
+
+    // Group by month
+    const groups = {};
+    for (const task of sorted) {
+      const raw = task.done_date || task.updated || task.created || "";
+      const key = raw ? formatMonth(raw) : "Unknown";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(task);
+    }
+
+    els.archiveList.innerHTML = Object.entries(groups)
+      .map(
+        ([month, tasks]) => `
+        <div class="archive-month-group">
+          <div class="archive-month-header">
+            <span class="archive-month-label">${esc(month)}</span>
+            <span class="archive-month-count">${tasks.length}</span>
+          </div>
+          <div class="archive-month-items">
+            ${tasks.map(archiveItemHTML).join("")}
+          </div>
+        </div>`
+      )
+      .join("");
+
+    // Attach click handlers
+    els.archiveList.querySelectorAll(".archive-item").forEach((item) => {
+      item.addEventListener("click", () => openModal(item.dataset.id));
+    });
+  }
+
+  function archiveItemHTML(task) {
+    const tags = (task.tags || [])
+      .slice(0, 4)
+      .map((t) => tagHTML(t, task.project))
+      .join("");
+    const doneDate = task.done_date || task.updated || "";
+    const pColor = getProjectColor(task.project);
+    const borderStyle = pColor ? `style="border-left:3px solid ${esc(pColor)}"` : "";
+
+    return `
+      <div class="archive-item" data-id="${esc(task.id)}" ${borderStyle}>
+        <div class="archive-item-title">${esc(task.title)}</div>
+        <div class="archive-item-meta">
+          ${task.project ? `<span class="archive-item-project">${esc(task.project)}</span>` : ""}
+          ${doneDate ? `<span class="archive-item-date">${formatDate(doneDate)}</span>` : ""}
+          ${tags}
+        </div>
+      </div>`;
+  }
+
+  function formatMonth(iso) {
+    if (!iso) return "Unknown";
+    try {
+      const d = new Date(iso + (iso.includes("T") ? "" : "T00:00:00"));
+      return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    } catch {
+      return "Unknown";
+    }
+  }
+
   // ── Search ──────────────────────────────────────────────────────
 
   let searchDebounce = null;
@@ -499,8 +587,9 @@
   // ── Modal (with full detail, context, and gallery) ──────────────
 
   async function openModal(taskId) {
-    // Start with list data for instant display
-    const listTask = allTasks.find((t) => t.id === taskId);
+    // Start with list data for instant display (check active tasks, then archive)
+    const listTask = allTasks.find((t) => t.id === taskId)
+      || archivedTasks.find((t) => t.id === taskId);
     if (!listTask) return;
     populateModal(listTask, null);
     els.modalOverlay.classList.add("open");

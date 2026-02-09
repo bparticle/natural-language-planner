@@ -524,6 +524,7 @@ def update_task(task_id: str, updates: dict[str, Any]) -> bool:
 def list_tasks(
     filter_by: Optional[dict[str, Any]] = None,
     project_id: Optional[str] = None,
+    include_archived: bool = False,
 ) -> list[dict[str, Any]]:
     """
     List tasks, optionally filtered.
@@ -532,6 +533,7 @@ def list_tasks(
         filter_by: Optional dict of field->value filters applied to metadata.
                    Supports: status, priority, tags (matches if any tag present).
         project_id: If provided, only list tasks in this project.
+        include_archived: If True, also scan the archive directory.
 
     Returns:
         List of task metadata dictionaries.
@@ -553,6 +555,17 @@ def list_tasks(
         search_dirs = [projects_dir / project_id / "tasks"]
     else:
         search_dirs = list(projects_dir.glob("*/tasks"))
+
+    # Also scan the archive directory when requested
+    if include_archived:
+        archive_dir = root / "archive"
+        if archive_dir.is_dir():
+            if project_id:
+                archive_tasks = archive_dir / project_id / "tasks"
+                if archive_tasks.is_dir():
+                    search_dirs.append(archive_tasks)
+            else:
+                search_dirs.extend(archive_dir.glob("*/tasks"))
 
     for task_dir in search_dirs:
         if not task_dir.is_dir():

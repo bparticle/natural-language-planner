@@ -115,6 +115,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         project = params.get("project", [None])[0]
         status = params.get("status", [None])[0]
         priority = params.get("priority", [None])[0]
+        include_archived = params.get("include_archived", [""])[0].lower() in ("1", "true", "yes")
 
         filters: dict[str, Any] = {}
         if status:
@@ -122,7 +123,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if priority:
             filters["priority"] = priority
 
-        tasks = list_tasks(filter_by=filters if filters else None, project_id=project)
+        tasks = list_tasks(filter_by=filters if filters else None, project_id=project,
+                           include_archived=include_archived)
         self._json_response(tasks)
 
     def _api_search(self, params: dict) -> None:

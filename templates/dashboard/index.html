@@ -77,6 +77,7 @@
       <button class="tab" data-view="board">Board</button>
       <button class="tab" data-view="projects">Projects</button>
       <button class="tab" data-view="timeline">Timeline</button>
+      <button class="tab" data-view="archive">Archive</button>
     </nav>
 
     <!-- ── Main content ────────────────────────────────────── -->
@@ -130,6 +131,17 @@
       <!-- Timeline view -->
       <div class="view view-timeline" id="view-timeline">
         <div class="timeline" id="timeline"></div>
+      </div>
+
+      <!-- Archive view -->
+      <div class="view view-archive" id="view-archive">
+        <div class="archive-section">
+          <div class="archive-header">
+            <h2>Archive</h2>
+            <span class="archive-count" id="archive-count"></span>
+          </div>
+          <div class="archive-list" id="archive-list"></div>
+        </div>
       </div>
 
       <!-- Search results overlay -->
