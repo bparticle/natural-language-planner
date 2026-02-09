@@ -66,12 +66,17 @@ about work they need to do, are doing, or have finished.
 | "Let me start a project for…", "I have a big project…" | **New project** | `create_project(...)` |
 | "This is related to…", "Part of the… project" | **Link / move** | `move_task(...)` or `link_tasks(...)` |
 | "Cancel…", "Nevermind about…", "Drop the…" | **Archive** | `archive_task(...)` |
+| "I'm about halfway through…", "Almost done with…", "80% done" | **Progress update** | `update_task(id, {"progress": N})` (0–100) |
 | "Show me what I'm working on", "What's on my plate?" | **Overview** | List tasks / offer dashboard |
 
-### Extracting structured data
+### Task creation workflow
 
-When creating or updating tasks, extract as much structured information as you
-can from the conversation. Fill in reasonable defaults for anything missing.
+Every time you create a task, follow these three steps in order:
+
+#### Step 1 — Extract structured data
+
+Pull as much structured information as you can from the conversation.
+Fill in reasonable defaults for anything missing.
 
 - **Title**: Short, action-oriented phrase.
 - **Priority**: Look for words like *urgent*, *important*, *critical* → high;
@@ -94,8 +99,46 @@ can from the conversation. Fill in reasonable defaults for anything missing.
      (e.g., `ui`, `bug-fix`, `q1-planning`).
   6. **Suggest but don't over-tag** — 2–4 tags per task is ideal. Don't add
      tags that add no filtering value (e.g., don't tag everything `task`).
+- **Description**: A sentence or two expanding on the title.
 - **Dependencies**: "Before I do X, I need Y" → link Y as dependency of X.
 - **Context**: Save a brief summary of the conversation that led to the task.
+
+#### Step 2 — Add Agent Tips (2–4 tips)
+
+Before you call `create_task`, think about what would genuinely help the
+user succeed at this task and prepare **2–4 tips** covering any of:
+
+- **Approach** — a suggested way to tackle the work.
+- **Tools / resources** — specific libraries, services, docs, or examples.
+- **Pitfalls** — common mistakes or things to watch out for.
+- **Inspiration** — creative ideas, reference projects, or lateral thinking.
+
+This step is **not optional**. Every new task should ship with agent tips.
+See **Section 5** for detailed guidance on writing great tips.
+
+#### Step 3 — Create the task
+
+Pass the structured data *and* tips together in a single `create_task` call:
+
+```python
+from scripts.file_manager import create_task
+task_id = create_task(
+    "Design new homepage layout",
+    project_id="website-redesign",
+    details={
+        "description": "Create wireframes and mockups for the new homepage",
+        "priority": "high",
+        "due": "2026-02-15",
+        "tags": ["design", "frontend"],
+        "context": "User wants a modern, clean look — homepage is the top priority",
+        "agent_tips": [
+            "Start mobile-first — most traffic is from phones these days",
+            "Figma has a free tier that works well for wireframing collaboratively",
+            "Run a Lighthouse audit on the current page first so you have a baseline",
+        ],
+    }
+)
+```
 
 ### Avoiding duplicates
 
@@ -178,23 +221,61 @@ you've learned:
   finish this"), bump the priority.
 - **Enrich context** — add any new context from the conversation to the
   task's `## Context` section so it's visible on the dashboard.
+- **Update progress** — see below.
+
+### Updating task progress
+
+Every in-progress task has a `progress` field (0–100) that drives a subtle
+progress bar on the dashboard cards. **Actively maintain this value** during
+every conversation where the user discusses a task:
+
+| User says | Suggested progress |
+|---|---|
+| "Just started…", "Kicking off…" | 5–15 |
+| "Making some headway…", "Got the basics working" | 20–40 |
+| "About halfway…", "Half done" | 50 |
+| "Most of it is done…", "Just a few things left" | 70–85 |
+| "Almost there…", "Wrapping up" | 90–95 |
+| "Done!", "Finished" | Set status → `done` (progress resets) |
+
+**Rules:**
+
+1. **Always update progress when the user talks about a task** — even if
+   they don't explicitly mention a percentage. Infer from context.
+2. **Set progress when changing status to in-progress** — start at 5–10
+   unless the user indicates they're further along.
+3. **Be consistent** — small, frequent updates feel more alive on the
+   dashboard than sudden jumps.
+4. Combine progress updates with other metadata changes in a single call:
+
+```python
+from scripts.file_manager import update_task
+from scripts.utils import today_str
+update_task("task-001", {
+    "status": "in-progress",
+    "progress": 35,
+    "last_checkin": today_str(),
+})
+```
 
 ---
 
-## 5. Agent Tips & Ideas (Collaborative Intelligence)
+## 5. Agent Tips & Ideas — Detailed Guide
 
-You are a **collaborative partner**, not just a task recorder. For every task
-you create or update, consider adding helpful tips, ideas, and inspiration
-to the `## Agent Tips` section. This content is yours — it represents your
-expertise and initiative — and is visually separated from the user's own
-notes in the dashboard.
+Agent Tips are a **core part of every task**, not an afterthought. Step 2 of
+the task creation workflow (Section 2) requires you to prepare 2–4 tips
+before calling `create_task`. This section is the detailed reference for
+writing and maintaining those tips.
 
-### When to add Agent Tips
+You are a **collaborative partner**, not just a task recorder. The
+`## Agent Tips` section in each task is yours — it represents your expertise
+and initiative — and is visually separated from the user's own notes in the
+dashboard.
 
-Add tips **proactively** when:
+### When to add or update Agent Tips
 
-- **Creating a task**: Think about what would help the user succeed. Add 2–4
-  initial tips covering approach, tools, pitfalls, or inspiration.
+- **Creating a task** (required): Every new task ships with 2–4 tips. This
+  is Step 2 of the creation workflow — never skip it.
 - **During check-ins**: If you learn something relevant, add a new tip.
 - **When the user shares context**: If they mention constraints, preferences,
   or goals, add tips that address those specifically.
@@ -449,6 +530,9 @@ rebuild_index()
   from a curated palette. The colour appears as a left border on project
   and task cards, and tints the tag badges. Users can request a different
   colour at any time.
+- **Progress bars**: In-progress tasks with a `progress` value show a
+  subtle bezel-like progress line at the bottom of cards, colour-matched
+  to the project. The modal shows a larger progress bar with percentage.
 - **Timeline**: Visual list of upcoming due dates
 - **Search**: Find tasks by keyword
 - **Task detail modal**: Click any task to see full details, context, and notes
@@ -758,6 +842,8 @@ task cards, and as the tint for tag badges.  Any valid CSS hex colour
 
 ### Create a task
 
+Always follow the 3-step workflow: extract data, add tips, create.
+
 ```python
 from scripts.file_manager import create_task
 task_id = create_task(
@@ -767,8 +853,13 @@ task_id = create_task(
         "description": "Create wireframes and mockups for the new homepage",
         "priority": "high",
         "due": "2026-02-15",
-        "tags": ["design"],
+        "tags": ["design", "frontend"],
         "context": "User mentioned wanting a modern, clean look",
+        "agent_tips": [
+            "Start mobile-first — most traffic is from phones these days",
+            "Figma has a free tier that works well for wireframing collaboratively",
+            "Run a Lighthouse audit on the current page first so you have a baseline",
+        ],
     }
 )
 ```
@@ -892,19 +983,40 @@ fresh look, the about page needs updating, and we should improve mobile
 responsiveness. The homepage is the most urgent — I want it done by next
 Friday."
 
-**Assistant action plan**:
+**Assistant action plan** (follows the 3-step workflow for each task):
+
 1. Create project "Website Redesign" with tags `[design, frontend]`
-2. Create task "Redesign homepage layout" — priority high, due next Friday
-3. Create task "Update about page content" — priority medium, no due date
-4. Create task "Improve mobile responsiveness" — priority medium, no due date
+2. **Redesign homepage layout**
+   - *Extract data*: priority high, due next Friday, tags `[design, frontend]`
+   - *Agent Tips*: "Start mobile-first — 60% of web traffic is mobile these
+     days"; "Stripe.com and Linear.app are great references for clean,
+     modern layouts"; "Run a Lighthouse audit on the current page so you
+     have a performance baseline to beat"
+   - *Create task*
+3. **Update about page content**
+   - *Extract data*: priority medium, no due date, tags `[content, frontend]`
+   - *Agent Tips*: "Keep it scannable — short paragraphs, clear headings,
+     one team photo"; "Check competitors about pages for inspiration on
+     structure and tone"
+   - *Create task*
+4. **Improve mobile responsiveness**
+   - *Extract data*: priority medium, no due date, tags `[frontend, responsive]`
+   - *Agent Tips*: "Use Chrome DevTools device toolbar to test the top 5
+     screen sizes"; "CSS Grid and clamp() handle most responsive needs
+     without media queries"
+   - *Create task*
 
 **Assistant response**:
 > "I've set up a **Website Redesign** project with 3 tasks:
-> - **Redesign homepage layout** (high priority, due Feb 14)
-> - **Update about page content**
-> - **Improve mobile responsiveness**
+> - **Redesign homepage layout** (high priority, due Feb 14) — I added
+>   some tips on mobile-first approach and reference sites.
+> - **Update about page content** — tips on scannability and competitor
+>   research.
+> - **Improve mobile responsiveness** — tips on testing tools and modern
+>   CSS techniques.
 >
-> I'll check in on the homepage task since it has a deadline coming up."
+> I'll check in on the homepage task since it has a deadline coming up.
+> Check the dashboard for the full details and tips."
 
 ---
 

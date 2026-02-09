@@ -512,6 +512,79 @@ body.dark .theme-toggle .icon-moon { display: none; }
   font-weight: 600;
 }
 
+/* ── Progress bar (inline rounded pill) ────────────────────────── */
+
+/* Shared track + fill used by cards and modal */
+.progress-bar-track {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border-light);
+  overflow: hidden;
+  flex: 1;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 400ms ease;
+  min-width: 2px;
+}
+
+/* Inline variant — inside card bodies (kanban + focus cards) */
+.progress-bar-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.progress-bar-pct {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 28px;
+  text-align: right;
+}
+
+/* Modal variant */
+.modal-progress {
+  margin-bottom: 16px;
+}
+
+.modal-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.modal-progress-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.modal-progress-pct {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.progress-bar-modal {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border-light);
+  overflow: hidden;
+}
+
+.progress-bar-modal .progress-bar-fill {
+  border-radius: 3px;
+  transition: width 400ms ease;
+}
+
 /* ── Card banner image ─────────────────────────────────────────── */
 .card-banner {
   border-radius: var(--radius) var(--radius) 0 0;

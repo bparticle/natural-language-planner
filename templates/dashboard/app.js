@@ -81,6 +81,10 @@
     modalGallery: $("#modal-gallery"),
     galleryGrid: $("#gallery-grid"),
     modalClose: $("#modal-close"),
+    // Progress
+    modalProgress: $("#modal-progress"),
+    modalProgressPct: $("#modal-progress-pct"),
+    modalProgressFill: $("#modal-progress-fill"),
     // Agent Tips
     modalAgentTips: $("#modal-agent-tips"),
     agentTipsHeader: $("#agent-tips-header"),
@@ -316,6 +320,7 @@
             ${tags}
           </div>
           ${deps.length ? `<div class="focus-card-deps"><strong>Depends on:</strong> ${deps.map(esc).join(", ")}</div>` : ""}
+          ${progressBarHTML(task)}
         </div>
       </div>`;
   }
@@ -338,6 +343,19 @@
     els.colCountDone.textContent = buckets.done.length;
 
     attachCardClicks();
+  }
+
+  function progressBarHTML(task) {
+    const progress = task.progress || 0;
+    if (task.status !== "in-progress" || progress <= 0) return "";
+    const pColor = getProjectColor(task.project) || "var(--amber)";
+    return `
+      <div class="progress-bar-inline">
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" style="width:${progress}%;background:${esc(pColor)}"></div>
+        </div>
+        <span class="progress-bar-pct">${progress}%</span>
+      </div>`;
   }
 
   function taskCardHTML(task) {
@@ -364,6 +382,7 @@
             ${dueLabel ? `<span class="task-card-due ${dueClass}">${dueLabel}</span>` : ""}
             ${tags}
           </div>
+          ${progressBarHTML(task)}
         </div>
       </div>`;
   }
@@ -618,6 +637,18 @@
     els.modalTags.innerHTML = (task.tags || [])
       .map((t) => tagHTML(t, task.project))
       .join("");
+
+    // Progress bar in modal
+    const progress = task.progress || 0;
+    if (task.status === "in-progress" && progress > 0) {
+      const pColor = getProjectColor(task.project) || "var(--amber)";
+      els.modalProgress.style.display = "block";
+      els.modalProgressPct.textContent = `${progress}%`;
+      els.modalProgressFill.style.width = `${progress}%`;
+      els.modalProgressFill.style.background = pColor;
+    } else {
+      els.modalProgress.style.display = "none";
+    }
 
     // Body — extract description and other sections from full detail
     if (detail && detail.body) {

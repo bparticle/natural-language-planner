@@ -377,6 +377,7 @@ def create_task(
             - due (str, ISO date)
             - tags (list[str])
             - dependencies (list[str], task IDs)
+            - progress (int, 0–100, completion percentage)
             - notes (list[str])
 
     Returns:
@@ -414,6 +415,10 @@ def create_task(
     if not validate_status(status):
         status = "todo"
 
+    progress = details.get("progress", 0)
+    if not isinstance(progress, int) or progress < 0 or progress > 100:
+        progress = 0
+
     meta: dict[str, Any] = {
         "id": task_id,
         "title": title,
@@ -425,6 +430,7 @@ def create_task(
         "last_checkin": today_str(),
         "tags": details.get("tags", []),
         "dependencies": details.get("dependencies", []),
+        "progress": progress,
     }
 
     body_parts = []
@@ -515,6 +521,11 @@ def update_task(task_id: str, updates: dict[str, Any]) -> bool:
     if "priority" in updates and not validate_priority(updates["priority"]):
         logger.warning("Invalid priority '%s'; ignoring.", updates["priority"])
         del updates["priority"]
+    if "progress" in updates:
+        p = updates["progress"]
+        if not isinstance(p, int) or p < 0 or p > 100:
+            logger.warning("Invalid progress '%s'; ignoring.", p)
+            del updates["progress"]
 
     meta.update(updates)
     content = serialize_frontmatter(meta, new_body if new_body is not None else body)
