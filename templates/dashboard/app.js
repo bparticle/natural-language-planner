@@ -699,7 +699,7 @@
     els.agentTipsList.innerHTML = tips
       .map(
         (tip) =>
-          `<li class="agent-tip-item">${bulbSvg}<span>${esc(tip)}</span></li>`
+          `<li class="agent-tip-item">${bulbSvg}<span>${esc(stripMarkdown(tip))}</span></li>`
       )
       .join("");
 
@@ -752,6 +752,20 @@
     const div = document.createElement("div");
     div.textContent = String(str);
     return div.innerHTML;
+  }
+
+  /** Strip common inline markdown so tips render as clean plain text. */
+  function stripMarkdown(str) {
+    if (!str) return str;
+    return str
+      .replace(/\*\*(.+?)\*\*/g, "$1")   // **bold**
+      .replace(/__(.+?)__/g, "$1")        // __bold__
+      .replace(/\*(.+?)\*/g, "$1")        // *italic*
+      .replace(/_(.+?)_/g, "$1")          // _italic_
+      .replace(/`(.+?)`/g, "$1")          // `code`
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)") // [text](url)
+      .replace(/^#+\s+/gm, "")           // headings
+      .replace(/~~(.+?)~~/g, "$1");       // ~~strikethrough~~
   }
 
   function formatDate(iso) {

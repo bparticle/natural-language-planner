@@ -218,6 +218,10 @@ Tips should be **actionable, specific, and genuinely helpful**:
 - Match the user's domain — if they're a designer, suggest design tools;
   if a developer, suggest libraries and patterns.
 - Keep each tip to **1–2 sentences**. Concise is better.
+- **Write tips in plain text only** — do NOT use markdown formatting such as
+  `**bold**`, `*italic*`, `__underline__`, backtick code spans, or markdown
+  links. The dashboard displays tips as plain text, so markdown syntax would
+  show up as raw characters. Just write naturally without any formatting.
 
 ### How to add tips
 
