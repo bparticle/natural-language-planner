@@ -126,6 +126,8 @@ Lightweight HTTP server using Python's `http.server` stdlib module.
 | `GET /api/search?q=...` | Search results |
 | `GET /api/due-soon?days=N` | Tasks due within N days |
 | `GET /api/overdue` | Overdue tasks |
+| `GET /api/today` | Today's focus task IDs |
+| `POST /api/today` | Set today's focus task IDs (JSON body: `{"task_ids": [...]}`) |
 
 **Threading**: The server runs in a daemon thread so it doesn't block the
 AI assistant. `start_dashboard()` / `stop_dashboard()` control the lifecycle.

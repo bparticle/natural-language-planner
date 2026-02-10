@@ -22,7 +22,7 @@ from typing import Any, Optional
 from urllib.parse import urlparse, parse_qs, unquote
 
 from .config_manager import load_config, set_setting, get_setting
-from .file_manager import list_projects, list_tasks, get_project, get_task
+from .file_manager import list_projects, list_tasks, get_project, get_task, get_today_tasks, set_today_tasks
 from .index_manager import rebuild_index, get_stats, search_tasks, get_tasks_due_soon, get_overdue_tasks
 
 logger = logging.getLogger("nlplanner.dashboard")
@@ -55,6 +55,16 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             # Serve static files from the dashboard directory
             super().do_GET()
 
+    def do_POST(self) -> None:
+        """Route POST requests to the appropriate handler."""
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path == "/api/today":
+            self._api_today_set()
+        else:
+            self._json_response({"error": "Not found"}, status=404)
+
     def _handle_api(self, path: str, query_string: str) -> None:
         """Dispatch API requests."""
         params = parse_qs(query_string)
@@ -66,6 +76,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             "/api/search": self._api_search,
             "/api/due-soon": self._api_due_soon,
             "/api/overdue": self._api_overdue,
+            "/api/today": self._api_today_get,
             "/api/health": self._api_health,
         }
 
@@ -161,6 +172,31 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._json_response(task)
         else:
             self._json_response({"error": "Task not found"}, status=404)
+
+    def _api_today_get(self, params: dict) -> None:
+        """Return the list of task IDs pinned to today's focus."""
+        self._json_response({"task_ids": get_today_tasks()})
+
+    def _api_today_set(self) -> None:
+        """Set the list of task IDs for today's focus (POST with JSON body)."""
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8")
+            data = json.loads(body)
+        except (ValueError, json.JSONDecodeError) as e:
+            self._json_response({"error": f"Invalid JSON: {e}"}, status=400)
+            return
+
+        task_ids = data.get("task_ids")
+        if not isinstance(task_ids, list):
+            self._json_response({"error": "task_ids must be a list"}, status=400)
+            return
+
+        ok = set_today_tasks([str(tid) for tid in task_ids])
+        if ok:
+            self._json_response({"task_ids": get_today_tasks()})
+        else:
+            self._json_response({"error": "Failed to save"}, status=500)
 
     def _api_serve_attachment(self, project_id: str, filename: str) -> None:
         """Serve a file from project attachments or media directory."""

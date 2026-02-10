@@ -43,31 +43,45 @@
       </div>
     </header>
 
-    <!-- ── Stats bar ───────────────────────────────────────── -->
-    <section class="stats-bar" id="stats-bar">
-      <div class="stat-card">
-        <span class="stat-value" id="stat-total">—</span>
-        <span class="stat-label">Total Tasks</span>
+    <!-- ── Top bar (Today + Stats) ────────────────────────── -->
+    <section class="top-bar">
+      <!-- Today's focus -->
+      <div class="today-section" id="today-section">
+        <div class="today-header">
+          <span class="today-label">Today</span>
+          <span class="today-date" id="today-date"></span>
+        </div>
+        <div class="today-list" id="today-list">
+          <div class="today-empty">No tasks for today yet.</div>
+        </div>
       </div>
-      <div class="stat-card stat-todo">
-        <span class="stat-value" id="stat-todo">—</span>
-        <span class="stat-label">To Do</span>
-      </div>
-      <div class="stat-card stat-progress">
-        <span class="stat-value" id="stat-progress">—</span>
-        <span class="stat-label">In Progress</span>
-      </div>
-      <div class="stat-card stat-done">
-        <span class="stat-value" id="stat-done">—</span>
-        <span class="stat-label">Done</span>
-      </div>
-      <div class="stat-card stat-overdue">
-        <span class="stat-value" id="stat-overdue">—</span>
-        <span class="stat-label">Overdue</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-value" id="stat-projects">—</span>
-        <span class="stat-label">Projects</span>
+
+      <!-- Stats bar -->
+      <div class="stats-bar" id="stats-bar">
+        <div class="stat-card">
+          <span class="stat-value" id="stat-total">—</span>
+          <span class="stat-label">Total Tasks</span>
+        </div>
+        <div class="stat-card stat-todo">
+          <span class="stat-value" id="stat-todo">—</span>
+          <span class="stat-label">To Do</span>
+        </div>
+        <div class="stat-card stat-progress">
+          <span class="stat-value" id="stat-progress">—</span>
+          <span class="stat-label">In Progress</span>
+        </div>
+        <div class="stat-card stat-done">
+          <span class="stat-value" id="stat-done">—</span>
+          <span class="stat-label">Done</span>
+        </div>
+        <div class="stat-card stat-overdue">
+          <span class="stat-value" id="stat-overdue">—</span>
+          <span class="stat-label">Overdue</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="stat-projects">—</span>
+          <span class="stat-label">Projects</span>
+        </div>
       </div>
     </section>
 

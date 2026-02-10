@@ -5,6 +5,7 @@ Handles creation, reading, updating, listing, and archiving of projects
 and tasks stored as Markdown files with YAML frontmatter.
 """
 
+import json
 import re
 import shutil
 import logging
@@ -1270,3 +1271,140 @@ def _replace_subtasks_section(body: str, subtasks: list[dict[str, Any]]) -> str:
             return f"{before}## Subtasks\n{rendered}\n\n## Attachments{rest}"
         else:
             return f"{body.rstrip()}\n\n## Subtasks\n{rendered}"
+
+
+# ── Today's Focus ─────────────────────────────────────────────────
+#
+# A lightweight daily focus list stored in .nlplanner/today.json.
+# The file contains a date stamp and a list of task IDs.  When the
+# date no longer matches today, the list is automatically cleared.
+
+
+def _today_json_path() -> Path:
+    """Return the path to .nlplanner/today.json in the workspace."""
+    config = load_config()
+    ws = config.get("workspace_path", "")
+    if not ws:
+        return Path.home() / "nlplanner" / ".nlplanner" / "today.json"
+    return Path(ws) / ".nlplanner" / "today.json"
+
+
+def get_today_tasks() -> list[str]:
+    """
+    Return the list of task IDs pinned to today's focus.
+
+    If the stored date is not today, the list is automatically cleared
+    and an empty list is returned.
+
+    Returns:
+        List of task ID strings (e.g. ``["task-001", "task-005"]``).
+
+    Example:
+        >>> from scripts.file_manager import get_today_tasks
+        >>> get_today_tasks()
+        ['task-001', 'task-005']
+    """
+    path = _today_json_path()
+    if not path.exists():
+        return []
+
+    raw = safe_read_file(path)
+    if not raw:
+        return []
+
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+    if data.get("date") != today_str():
+        # New day — auto-clear
+        _write_today_json(today_str(), [])
+        return []
+
+    return data.get("task_ids", [])
+
+
+def set_today_tasks(task_ids: list[str]) -> bool:
+    """
+    Set the list of task IDs for today's focus.
+
+    Replaces any existing today list with the given IDs.  The date is
+    automatically stamped to today.
+
+    Args:
+        task_ids: List of task ID strings to pin as today's focus.
+
+    Returns:
+        True if saved successfully.
+
+    Example:
+        >>> from scripts.file_manager import set_today_tasks
+        >>> set_today_tasks(["task-001", "task-003", "task-007"])
+        True
+    """
+    return _write_today_json(today_str(), list(task_ids))
+
+
+def add_today_task(task_id: str) -> bool:
+    """
+    Add a single task ID to today's focus list (if not already present).
+
+    Args:
+        task_id: The task ID to add.
+
+    Returns:
+        True if saved successfully.
+
+    Example:
+        >>> from scripts.file_manager import add_today_task
+        >>> add_today_task("task-005")
+        True
+    """
+    current = get_today_tasks()
+    if task_id not in current:
+        current.append(task_id)
+    return set_today_tasks(current)
+
+
+def remove_today_task(task_id: str) -> bool:
+    """
+    Remove a single task ID from today's focus list.
+
+    Args:
+        task_id: The task ID to remove.
+
+    Returns:
+        True if saved successfully.
+
+    Example:
+        >>> from scripts.file_manager import remove_today_task
+        >>> remove_today_task("task-005")
+        True
+    """
+    current = get_today_tasks()
+    current = [tid for tid in current if tid != task_id]
+    return set_today_tasks(current)
+
+
+def clear_today_tasks() -> bool:
+    """
+    Clear all tasks from today's focus list.
+
+    Returns:
+        True if saved successfully.
+
+    Example:
+        >>> from scripts.file_manager import clear_today_tasks
+        >>> clear_today_tasks()
+        True
+    """
+    return _write_today_json(today_str(), [])
+
+
+def _write_today_json(date_str: str, task_ids: list[str]) -> bool:
+    """Write the today.json file with the given date and task IDs."""
+    path = _today_json_path()
+    ensure_directory(path.parent)
+    content = json.dumps({"date": date_str, "task_ids": task_ids}, indent=2)
+    return safe_write_file(path, content)

@@ -205,11 +205,136 @@ body:not(.dark) .theme-toggle .icon-moon { display: block; }
 body.dark .theme-toggle .icon-sun { display: block; }
 body.dark .theme-toggle .icon-moon { display: none; }
 
+/* ── Top bar (Today + Stats) ───────────────────────────────────── */
+.top-bar {
+  display: flex;
+  gap: 16px;
+  padding: 16px 24px;
+  align-items: stretch;
+}
+
+/* ── Today section ────────────────────────────────────────────── */
+.today-section {
+  min-width: 260px;
+  max-width: 320px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.today-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.today-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.today-date {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.today-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  overflow-y: auto;
+  max-height: 120px;
+}
+
+.today-empty {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 8px 0;
+}
+
+.today-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.today-item:hover {
+  background: var(--surface-hover);
+}
+
+.today-item-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.today-item-dot.dot-todo { background: var(--blue); }
+.today-item-dot.dot-in-progress { background: var(--amber); }
+.today-item-dot.dot-done { background: var(--green); }
+
+.today-item-title {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.today-item-status {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 1px 6px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.today-item-status.status-todo {
+  color: var(--blue);
+  background: var(--blue-light);
+}
+
+.today-item-status.status-in-progress {
+  color: var(--amber);
+  background: var(--amber-light);
+}
+
+.today-item-status.status-done {
+  color: var(--green);
+  background: var(--green-light);
+}
+
+.today-item.is-done .today-item-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
 /* ── Stats bar ─────────────────────────────────────────────────── */
 .stats-bar {
   display: flex;
   gap: 12px;
-  padding: 16px 24px;
+  flex: 1;
   overflow-x: auto;
 }
 
@@ -1363,6 +1488,17 @@ body.dark .theme-toggle .icon-moon { display: none; }
     margin: 4px 0 2px;
   }
 
+  /* Top bar: stack on tablet */
+  .top-bar {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .today-section {
+    min-width: 0;
+    max-width: 100%;
+  }
+
   /* Grids go single-column */
   .kanban { grid-template-columns: 1fr; }
   .week-grid { grid-template-columns: 1fr; }
@@ -1374,11 +1510,26 @@ body.dark .theme-toggle .icon-moon { display: none; }
   /* Tighter page padding */
   .main-content { padding: 14px 12px; }
 
+  /* ── Top bar: stack today + stats vertically ──────────── */
+  .top-bar {
+    flex-direction: column;
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .today-section {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .today-list {
+    max-height: 80px;
+  }
+
   /* ── Stats: 3×2 compact grid ──────────────────────────── */
   .stats-bar {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    padding: 10px 12px;
     gap: 8px;
     overflow-x: visible;
   }
@@ -1555,6 +1706,10 @@ body.dark .theme-toggle .icon-moon { display: none; }
 
 /* ── Very small phones (≤ 380px) ──────────────────────────────── */
 @media (max-width: 380px) {
+  .top-bar {
+    padding: 8px 10px;
+  }
+
   .stats-bar {
     grid-template-columns: repeat(2, 1fr);
     gap: 6px;

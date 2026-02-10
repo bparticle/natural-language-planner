@@ -23,6 +23,7 @@
   let currentView = "focus";   // Default to This Week view
   let lastDataFingerprint = "";  // Detect actual data changes to avoid needless re-renders
   let lastVisibleTime = Date.now(); // Track when the tab was last visible
+  let todayTaskIds = [];       // Task IDs pinned to today's focus
 
   // Maps: project-id → hex colour, project-id → [tags]
   let projectColorMap = {};
@@ -39,6 +40,10 @@
     btnTheme: $("#btn-theme"),
     tabs: $$(".tab"),
     views: $$(".view"),
+    // Today
+    todaySection: $("#today-section"),
+    todayDate: $("#today-date"),
+    todayList: $("#today-list"),
     // Stats
     statTotal: $("#stat-total"),
     statTodo: $("#stat-todo"),
@@ -150,6 +155,12 @@
       // Archived tasks = everything from the include_archived call that has status "archived"
       if (a) archivedTasks = a.filter((task) => task.status === "archived");
       buildProjectMaps();
+
+      // Load today tasks from API/localStorage (auto-clears on date change)
+      todayTaskIds = await loadTodayTasks();
+      // Seed example "today" tasks if the list is empty (demo purposes)
+      await seedTodayExamples();
+
       render();
     }
 
@@ -213,6 +224,7 @@
 
   function render() {
     renderStats();
+    renderToday();
     renderWeekFocus();
     renderBoard();
     renderProjects();
@@ -227,6 +239,140 @@
     els.statDone.textContent = stats.by_status?.done ?? "—";
     els.statOverdue.textContent = stats.overdue ?? "—";
     els.statProjects.textContent = stats.active_projects ?? "—";
+  }
+
+  // ── Today's Focus ──────────────────────────────────────────────
+
+  const TODAY_STORAGE_KEY = "nlp-today-tasks";
+
+  /**
+   * Get today's date as YYYY-MM-DD string.
+   */
+  function todayISODate() {
+    const d = new Date();
+    return d.getFullYear() + "-" +
+      String(d.getMonth() + 1).padStart(2, "0") + "-" +
+      String(d.getDate()).padStart(2, "0");
+  }
+
+  /**
+   * Load today task IDs from the backend API.
+   * Falls back to localStorage if the API is unavailable.
+   * Auto-clears localStorage if the stored date is not today.
+   */
+  async function loadTodayTasks() {
+    // Try the API first (source of truth when the agent sets tasks)
+    const resp = await api("/api/today");
+    if (resp && Array.isArray(resp.task_ids) && resp.task_ids.length > 0) {
+      // Sync to localStorage as a cache
+      saveTodayTasksLocal(resp.task_ids);
+      return resp.task_ids;
+    }
+
+    // Fallback to localStorage (covers the seeded-examples case
+    // and offline/no-backend scenarios)
+    try {
+      const raw = localStorage.getItem(TODAY_STORAGE_KEY);
+      if (!raw) return [];
+      const data = JSON.parse(raw);
+      if (data.date !== todayISODate()) {
+        localStorage.removeItem(TODAY_STORAGE_KEY);
+        return [];
+      }
+      return data.taskIds || [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Save today task IDs to localStorage with today's date stamp.
+   */
+  function saveTodayTasksLocal(taskIds) {
+    localStorage.setItem(TODAY_STORAGE_KEY, JSON.stringify({
+      date: todayISODate(),
+      taskIds: taskIds,
+    }));
+  }
+
+  /**
+   * Seed example today tasks if the list is empty and tasks are loaded.
+   * Picks a mix of statuses to demonstrate the feature.
+   * Seeds to both backend and localStorage so the agent can see them too.
+   */
+  async function seedTodayExamples() {
+    if (todayTaskIds.length > 0 || allTasks.length === 0) return;
+
+    // Pick up to 4 representative tasks: 1 in-progress, 1 done, 2 todo
+    const inProgress = allTasks.find((t) => t.status === "in-progress");
+    const done = allTasks.find((t) => t.status === "done");
+    const todos = allTasks.filter((t) => t.status === "todo").slice(0, 2);
+
+    const picked = [];
+    if (inProgress) picked.push(inProgress.id);
+    for (const t of todos) picked.push(t.id);
+    if (done) picked.push(done.id);
+
+    // Limit to 4
+    todayTaskIds = picked.slice(0, 4);
+    saveTodayTasksLocal(todayTaskIds);
+
+    // Also persist to backend so it survives across sessions
+    try {
+      await fetch(`${API_BASE}/api/today`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task_ids: todayTaskIds }),
+      });
+    } catch { /* best effort */ }
+  }
+
+  /**
+   * Render the Today section with the current today task IDs.
+   */
+  function renderToday() {
+    // Show today's date
+    const now = new Date();
+    els.todayDate.textContent = now.toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+
+    // Resolve task IDs to full task objects (check active + archived)
+    const allAvailable = [...allTasks, ...archivedTasks];
+    const todayTasks = todayTaskIds
+      .map((id) => allAvailable.find((t) => t.id === id))
+      .filter(Boolean);
+
+    if (todayTasks.length === 0) {
+      els.todayList.innerHTML = '<div class="today-empty">No tasks for today yet.</div>';
+      return;
+    }
+
+    els.todayList.innerHTML = todayTasks
+      .map((task) => {
+        const status = task.status || "todo";
+        const dotClass = `dot-${status}`;
+        const statusClass = `status-${status}`;
+        const statusLabel = status === "in-progress" ? "wip" : status;
+        const isDone = status === "done";
+        const pColor = getProjectColor(task.project);
+        const dotStyle = pColor ? `style="background:${esc(pColor)}"` : "";
+
+        return `
+          <div class="today-item${isDone ? " is-done" : ""}" data-id="${esc(task.id)}">
+            <span class="today-item-dot ${dotClass}" ${dotStyle}></span>
+            <span class="today-item-title">${esc(task.title)}</span>
+            <span class="today-item-status ${statusClass}">${esc(statusLabel)}</span>
+          </div>`;
+      })
+      .join("");
+
+    // Click to open modal
+    els.todayList.querySelectorAll(".today-item").forEach((item) => {
+      item.addEventListener("click", () => openModal(item.dataset.id));
+    });
   }
 
   // ── This Week Focus ─────────────────────────────────────────────

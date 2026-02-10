@@ -545,7 +545,88 @@ update_task("task-002", {"status": "in-progress", "last_checkin": today_str()})
 
 ---
 
-## 8. Handling Images & Attachments
+## 8. Today's Focus
+
+The dashboard has a **Today** section at the top-left of the page that
+shows which tasks the user is working on *today*.  Unlike the weekly view
+(which auto-populates based on status and due dates), Today is a
+**curated, explicit list** — either set by the agent from the conversation
+or chosen by the user.  The list is **automatically cleared at the end of
+each day** so the user starts fresh every morning.
+
+### When to set today's tasks
+
+Set the today list whenever the user signals what they want to work on
+in the current session or day:
+
+| User says | Action |
+|---|---|
+| "Today I'm going to work on X and Y" | `set_today_tasks([x_id, y_id])` |
+| "Let me focus on the homepage today" | `set_today_tasks(["task-001"])` |
+| "Add the API task to my today list" | `add_today_task("task-005")` |
+| "What am I working on today?" | Read `get_today_tasks()`, show the list |
+| "I'm done with X for today" | `remove_today_task("task-001")` |
+| "Clear my today list" | `clear_today_tasks()` |
+
+You can also **infer** the today list from context.  If the user starts
+discussing specific tasks, mentions deadlines for today, or updates
+progress on a task, add those tasks to the today list automatically.
+
+### API
+
+```python
+from scripts.file_manager import (
+    get_today_tasks,
+    set_today_tasks,
+    add_today_task,
+    remove_today_task,
+    clear_today_tasks,
+)
+
+# Read today's focus list
+task_ids = get_today_tasks()           # ["task-001", "task-005"]
+
+# Replace the entire list
+set_today_tasks(["task-001", "task-003", "task-007"])
+
+# Add a single task (idempotent — won't duplicate)
+add_today_task("task-005")
+
+# Remove a single task
+remove_today_task("task-003")
+
+# Clear everything
+clear_today_tasks()
+```
+
+### How it works
+
+- Stored in `.nlplanner/today.json` as `{"date": "YYYY-MM-DD", "task_ids": [...]}`.
+- When the date no longer matches today, the list is **automatically emptied**
+  on the next read — no cron job or manual cleanup needed.
+- The dashboard fetches via `GET /api/today` and renders tasks as compact
+  clickable items to the left of the stats bar.  Tasks show their current
+  status (todo / wip / done) regardless — the today list is status-agnostic.
+- The agent can set today tasks via `POST /api/today` with a JSON body
+  `{"task_ids": ["task-001", ...]}`, or use the Python functions directly.
+
+### Rules for the agent
+
+1. **Set the today list proactively** when the user discusses what they
+   want to accomplish today.  Don't wait for them to ask.
+2. **Combine with check-ins** — at the start of a conversation, if there
+   are no today tasks yet, suggest a focus list based on overdue tasks,
+   in-progress work, and upcoming deadlines.
+3. **Keep it short** — 3–5 tasks is ideal.  Today is about focus, not a
+   full backlog.
+4. **Don't clear automatically mid-conversation** — only clear when the
+   user asks or when the day rolls over.
+5. **Always rebuild the index** after modifying today tasks so the
+   dashboard reflects changes immediately.
+
+---
+
+## 9. Handling Images & Attachments
 
 When the user shares an image or references a file in conversation:
 
@@ -598,7 +679,7 @@ PNG, JPG, JPEG, GIF, WebP, SVG, BMP — all displayed inline in the gallery.
 
 ---
 
-## 9. Dashboard
+## 10. Dashboard
 
 The skill includes a local web dashboard for a visual overview.
 
@@ -660,6 +741,9 @@ rebuild_index()
 
 ### Dashboard features (for user reference)
 
+- **Today's Focus** (top bar): Compact reference list of tasks the user is
+  working on today, shown to the left of the stats bar.  Clickable — opens
+  the task detail modal.  Auto-clears at the start of each new day.
 - **This Week** (default view): Focus cards showing what's active this week,
   with descriptions, context, dependencies, and status badges
 - **Kanban board**: Columns for To Do, In Progress, Done
@@ -948,7 +1032,7 @@ sudo systemctl daemon-reload
 
 ---
 
-## 10. Common Operations Reference
+## 11. Common Operations Reference
 
 ### Create a project
 
@@ -1105,9 +1189,27 @@ subs[2]["done"] = True
 update_subtasks("task-003", subs)
 ```
 
+### Set today's focus
+
+```python
+from scripts.file_manager import set_today_tasks, add_today_task, remove_today_task, get_today_tasks
+
+# Set the full list
+set_today_tasks(["task-001", "task-003", "task-007"])
+
+# Add one task
+add_today_task("task-005")
+
+# Remove one task
+remove_today_task("task-003")
+
+# Read current list
+today = get_today_tasks()   # ["task-001", "task-005", "task-007"]
+```
+
 ---
 
-## 11. Configuration
+## 12. Configuration
 
 Settings are stored in `.nlplanner/config.json`. The user can adjust:
 
@@ -1127,7 +1229,7 @@ current = get_setting("dashboard_port")  # 8080
 
 ---
 
-## 12. Communication Style
+## 13. Communication Style
 
 Follow these guidelines when talking to the user about their tasks:
 
@@ -1142,7 +1244,7 @@ Follow these guidelines when talking to the user about their tasks:
 
 ---
 
-## 13. Error Handling
+## 14. Error Handling
 
 - If the workspace isn't set up, offer to initialise it.
 - If a file operation fails, tell the user plainly and suggest a fix.
@@ -1151,7 +1253,7 @@ Follow these guidelines when talking to the user about their tasks:
 
 ---
 
-## 14. Data Principles
+## 15. Data Principles
 
 - **Local-first**: All data lives on the user's machine. No cloud services.
 - **Human-readable**: Everything is Markdown + YAML. Users can edit files
@@ -1161,7 +1263,7 @@ Follow these guidelines when talking to the user about their tasks:
 
 ---
 
-## 15. Example Conversation
+## 16. Example Conversation
 
 **User**: "I need to redesign the company website. The homepage needs a
 fresh look, the about page needs updating, and we should improve mobile
@@ -1205,7 +1307,7 @@ Friday."
 
 ---
 
-## 16. Technical Notes
+## 17. Technical Notes
 
 ### Dependencies
 
