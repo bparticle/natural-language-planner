@@ -303,18 +303,18 @@
   async function seedTodayExamples() {
     if (todayTaskIds.length > 0 || allTasks.length === 0) return;
 
-    // Pick up to 4 representative tasks: 1 in-progress, 1 done, 2 todo
-    const inProgress = allTasks.find((t) => t.status === "in-progress");
-    const done = allTasks.find((t) => t.status === "done");
-    const todos = allTasks.filter((t) => t.status === "todo").slice(0, 2);
+    // Pick up to 7 representative tasks: mix of statuses for demo
+    const inProgress = allTasks.filter((t) => t.status === "in-progress").slice(0, 3);
+    const todos = allTasks.filter((t) => t.status === "todo").slice(0, 3);
+    const done = allTasks.filter((t) => t.status === "done").slice(0, 2);
 
     const picked = [];
-    if (inProgress) picked.push(inProgress.id);
+    for (const t of inProgress) picked.push(t.id);
     for (const t of todos) picked.push(t.id);
-    if (done) picked.push(done.id);
+    for (const t of done) picked.push(t.id);
 
-    // Limit to 4
-    todayTaskIds = picked.slice(0, 4);
+    // Limit to 7
+    todayTaskIds = picked.slice(0, 7);
     saveTodayTasksLocal(todayTaskIds);
 
     // Also persist to backend so it survives across sessions
@@ -372,6 +372,14 @@
     // Click to open modal
     els.todayList.querySelectorAll(".today-item").forEach((item) => {
       item.addEventListener("click", () => openModal(item.dataset.id));
+    });
+
+    // Toggle fade mask based on whether content overflows
+    requestAnimationFrame(() => {
+      els.todayList.classList.toggle(
+        "is-overflowing",
+        els.todayList.scrollHeight > els.todayList.clientHeight
+      );
     });
   }
 
