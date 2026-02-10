@@ -1006,10 +1006,14 @@ def update_subtasks(task_id: str, subtasks: list[dict[str, Any]]) -> bool:
     meta, body = parse_frontmatter(raw)
     body = _replace_subtasks_section(body, subtasks)
 
-    # Auto-sync progress
+    # Auto-sync progress and status
     if subtasks:
         done = sum(1 for s in subtasks if s["done"])
         meta["progress"] = round(done / len(subtasks) * 100)
+        if done == len(subtasks):
+            meta["status"] = "done"
+        elif done > 0 and meta.get("status") == "todo":
+            meta["status"] = "in-progress"
     else:
         meta["progress"] = 0
 
@@ -1051,9 +1055,13 @@ def toggle_subtask(task_id: str, index: int) -> bool:
     subtasks[index]["done"] = not subtasks[index]["done"]
     body = _replace_subtasks_section(body, subtasks)
 
-    # Auto-sync progress
+    # Auto-sync progress and status
     done = sum(1 for s in subtasks if s["done"])
     meta["progress"] = round(done / len(subtasks) * 100)
+    if done == len(subtasks):
+        meta["status"] = "done"
+    elif done > 0 and meta.get("status") == "todo":
+        meta["status"] = "in-progress"
 
     content = serialize_frontmatter(meta, body)
     return safe_write_file(path, content)
@@ -1096,9 +1104,11 @@ def add_subtasks(task_id: str, titles: list[str]) -> bool:
 
     body = _replace_subtasks_section(body, all_subtasks)
 
-    # Auto-sync progress
+    # Auto-sync progress and status
     done = sum(1 for s in all_subtasks if s["done"])
     meta["progress"] = round(done / len(all_subtasks) * 100)
+    if done > 0 and meta.get("status") == "todo":
+        meta["status"] = "in-progress"
 
     content = serialize_frontmatter(meta, body)
     return safe_write_file(path, content)
