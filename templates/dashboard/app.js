@@ -11,7 +11,7 @@
 
   // ── Configuration ───────────────────────────────────────────────
   const API_BASE = window.location.origin;
-  const POLL_INTERVAL_MS = 5000;
+  const STALE_THRESHOLD_MS = 60000; // Re-fetch when returning to tab after 60s
   const IMG_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"];
 
   // ── State ───────────────────────────────────────────────────────
@@ -21,7 +21,8 @@
   let stats = {};
   let taskDetails = {};        // Cache of full task bodies keyed by id
   let currentView = "focus";   // Default to This Week view
-  let pollTimer = null;
+  let lastDataFingerprint = "";  // Detect actual data changes to avoid needless re-renders
+  let lastVisibleTime = Date.now(); // Track when the tab was last visible
 
   // Maps: project-id → hex colour, project-id → [tags]
   let projectColorMap = {};
@@ -126,19 +127,32 @@
   // ── Data loading ────────────────────────────────────────────────
 
   async function loadAll() {
+    // Visual feedback — spin the refresh icon while loading
+    els.btnRefresh.classList.add("spinning");
+
     const [s, p, t, a] = await Promise.all([
       api("/api/stats"),
       api("/api/projects"),
       api("/api/tasks"),
       api("/api/tasks?include_archived=true"),
     ]);
-    if (s) stats = s;
-    if (p) allProjects = p;
-    if (t) allTasks = t;
-    // Archived tasks = everything from the include_archived call that has status "archived"
-    if (a) archivedTasks = a.filter((task) => task.status === "archived");
-    buildProjectMaps();
-    render();
+
+    // Fingerprint the response data — skip re-render if nothing changed
+    const fingerprint = JSON.stringify([s, p, t, a]);
+    const dataChanged = fingerprint !== lastDataFingerprint;
+    lastDataFingerprint = fingerprint;
+
+    if (dataChanged) {
+      if (s) stats = s;
+      if (p) allProjects = p;
+      if (t) allTasks = t;
+      // Archived tasks = everything from the include_archived call that has status "archived"
+      if (a) archivedTasks = a.filter((task) => task.status === "archived");
+      buildProjectMaps();
+      render();
+    }
+
+    els.btnRefresh.classList.remove("spinning");
   }
 
   /**
@@ -966,11 +980,17 @@
       }
     });
 
+    // Refresh when the user returns to the tab after it's been hidden a while
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        lastVisibleTime = Date.now();
+      } else if (Date.now() - lastVisibleTime > STALE_THRESHOLD_MS) {
+        loadAll();
+      }
+    });
+
     // Initial load
     loadAll();
-
-    // Polling
-    pollTimer = setInterval(loadAll, POLL_INTERVAL_MS);
   }
 
   // ── Start ───────────────────────────────────────────────────────

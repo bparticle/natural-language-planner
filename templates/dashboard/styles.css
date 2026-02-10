@@ -174,6 +174,16 @@ body {
   color: var(--text);
 }
 
+/* Refresh button spin animation */
+#btn-refresh.spinning .icon {
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* Dark mode toggle */
 .theme-toggle {
   width: 36px;
@@ -483,6 +493,12 @@ body.dark .theme-toggle .icon-moon { display: none; }
   padding-left: 12px;
 }
 
+/* Match banner negative margin to the reduced padding-left so the
+   image doesn't overlap the coloured border */
+.task-card[style*="border-left"] .card-banner {
+  margin-left: -12px;
+}
+
 .task-card-title {
   font-size: 0.87rem;
   font-weight: 500;
@@ -608,10 +624,15 @@ body.dark .theme-toggle .icon-moon { display: none; }
   margin-top: -12px;
 }
 
-/* Focus card banner — slightly taller */
+/* Focus card banner — slightly taller.
+   No negative side-margins needed: .focus-card has padding:0 so
+   the block banner already fills the full content width.  Negative
+   margins shifted the image outside the box and relied on
+   overflow:hidden to clip, which broke when a coloured border-left
+   was applied (image overlapped the left bezel, gap on the right). */
 .card-banner-lg {
   height: 110px;
-  margin: -18px -20px 14px -20px;
+  margin: 0 0 14px 0;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
@@ -1311,7 +1332,7 @@ body.dark .theme-toggle .icon-moon { display: none; }
 
   .card-banner-lg {
     height: 90px;
-    margin: 0 -14px 12px -14px;
+    margin: 0 0 12px 0;
   }
 
   /* ── Kanban: compact stacked columns ──────────────────── */
@@ -1328,6 +1349,7 @@ body.dark .theme-toggle .icon-moon { display: none; }
 
   .task-card { padding: 10px 12px; }
   .task-card[style*="border-left"] { padding-left: 10px; }
+  .task-card[style*="border-left"] .card-banner { margin-left: -10px; }
   .task-card-title { font-size: 0.82rem; margin-bottom: 4px; }
 
   .card-banner {
