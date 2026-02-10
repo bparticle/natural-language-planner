@@ -78,6 +78,7 @@
     modalBody: $("#modal-body"),
     modalContext: $("#modal-context"),
     modalContextText: $("#modal-context-text"),
+    modalSubtasks: $("#modal-subtasks"),
     modalDeps: $("#modal-deps"),
     modalGallery: $("#modal-gallery"),
     galleryGrid: $("#gallery-grid"),
@@ -360,16 +361,29 @@
   }
 
   function progressBarHTML(task) {
-    const progress = task.progress || 0;
-    if (task.status !== "in-progress" || progress <= 0) return "";
+    const sc = task.subtask_count || 0;
+    const sd = task.subtask_done || 0;
+    const progress = sc > 0 ? Math.round(sd / sc * 100) : (task.progress || 0);
+    if (task.status !== "in-progress" || progress <= 0) {
+      // Even if progress is 0, show subtask chip when subtasks exist
+      if (sc > 0) return subtaskChipHTML(sd, sc);
+      return "";
+    }
     const pColor = getProjectColor(task.project) || "var(--amber)";
     return `
       <div class="progress-bar-inline">
         <div class="progress-bar-track">
           <div class="progress-bar-fill" style="width:${progress}%;background:${esc(pColor)}"></div>
         </div>
-        <span class="progress-bar-pct">${progress}%</span>
+        ${sc > 0
+          ? `<span class="progress-bar-pct subtask-count-inline">${sd}/${sc}</span>`
+          : `<span class="progress-bar-pct">${progress}%</span>`}
       </div>`;
+  }
+
+  function subtaskChipHTML(done, total) {
+    const checkSvg = '<svg class="subtask-chip-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 8 7 12 13 4"/></svg>';
+    return `<span class="subtask-chip">${checkSvg}${done}/${total}</span>`;
   }
 
   function taskCardHTML(task) {
@@ -652,22 +666,12 @@
       .map((t) => tagHTML(t, task.project))
       .join("");
 
-    // Progress bar in modal
-    const progress = task.progress || 0;
-    if (task.status === "in-progress" && progress > 0) {
-      const pColor = getProjectColor(task.project) || "var(--amber)";
-      els.modalProgress.style.display = "block";
-      els.modalProgressPct.textContent = `${progress}%`;
-      els.modalProgressFill.style.width = `${progress}%`;
-      els.modalProgressFill.style.background = pColor;
-    } else {
-      els.modalProgress.style.display = "none";
-    }
-
     // Body — extract description and other sections from full detail
+    let subtasks = [];
     if (detail && detail.body) {
       const sections = parseBodySections(detail.body);
       els.modalBody.textContent = sections.description || task.description || "";
+      subtasks = sections.subtasks || [];
 
       // Context section
       if (sections.context) {
@@ -685,6 +689,25 @@
       els.modalBody.textContent = task.description || "";
       els.modalContext.style.display = "none";
     }
+
+    // Progress bar in modal — derive from subtasks when available
+    const sc = subtasks.length || task.subtask_count || 0;
+    const sd = subtasks.length
+      ? subtasks.filter((s) => s.done).length
+      : (task.subtask_done || 0);
+    const progress = sc > 0 ? Math.round(sd / sc * 100) : (task.progress || 0);
+    if (task.status === "in-progress" && progress > 0) {
+      const pColor = getProjectColor(task.project) || "var(--amber)";
+      els.modalProgress.style.display = "block";
+      els.modalProgressPct.textContent = sc > 0 ? `${sd}/${sc}` : `${progress}%`;
+      els.modalProgressFill.style.width = `${progress}%`;
+      els.modalProgressFill.style.background = pColor;
+    } else {
+      els.modalProgress.style.display = "none";
+    }
+
+    // Subtasks checklist in modal
+    renderSubtasks(subtasks);
 
     // Dependencies
     const deps = task.dependencies || [];
@@ -778,7 +801,7 @@
   }
 
   function parseBodySections(body) {
-    const sections = { description: "", context: "", notes: "", attachments: "", agentTips: [] };
+    const sections = { description: "", context: "", notes: "", attachments: "", agentTips: [], subtasks: [] };
     const parts = body.split(/^## /m);
 
     for (const part of parts) {
@@ -789,6 +812,16 @@
         sections.context = part.replace(/^context\s*/i, "").trim();
       } else if (lower.startsWith("notes")) {
         sections.notes = part.replace(/^notes\s*/i, "").trim();
+      } else if (lower.startsWith("subtasks")) {
+        const subtaskText = part.replace(/^subtasks\s*/i, "").trim();
+        sections.subtasks = subtaskText
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => /^- \[[ xX]\] .+/.test(l))
+          .map((l) => ({
+            done: l.charAt(3) !== " ",
+            title: l.slice(6),
+          }));
       } else if (lower.startsWith("attachments")) {
         sections.attachments = part.replace(/^attachments\s*/i, "").trim();
       } else if (lower.startsWith("agent tips")) {
@@ -808,6 +841,40 @@
 
   function closeModal() {
     els.modalOverlay.classList.remove("open");
+  }
+
+  // ── Subtasks (modal) ───────────────────────────────────────────
+
+  function renderSubtasks(subtasks) {
+    if (!subtasks || subtasks.length === 0) {
+      els.modalSubtasks.style.display = "none";
+      return;
+    }
+
+    els.modalSubtasks.style.display = "block";
+
+    const checkboxEmpty = '<svg class="subtask-checkbox" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="16" height="16" rx="3"/></svg>';
+    const checkboxFilled = '<svg class="subtask-checkbox checked" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="16" height="16" rx="3"/><polyline points="5 9 8 12 13 6"/></svg>';
+
+    const done = subtasks.filter((s) => s.done).length;
+    const total = subtasks.length;
+
+    els.modalSubtasks.innerHTML = `
+      <div class="subtask-header">
+        <span class="subtask-header-label">Subtasks</span>
+        <span class="subtask-header-count">${done} of ${total}</span>
+      </div>
+      <ul class="subtask-list">
+        ${subtasks
+          .map(
+            (s) => `
+          <li class="subtask-item${s.done ? " done" : ""}">
+            ${s.done ? checkboxFilled : checkboxEmpty}
+            <span class="subtask-title">${esc(s.title)}</span>
+          </li>`
+          )
+          .join("")}
+      </ul>`;
   }
 
   // ── Agent Tips ──────────────────────────────────────────────────

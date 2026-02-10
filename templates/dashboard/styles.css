@@ -601,6 +601,101 @@ body.dark .theme-toggle .icon-moon { display: none; }
   transition: width 400ms ease;
 }
 
+/* ── Subtasks (modal checklist) ────────────────────────────────── */
+
+.modal-subtasks {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-light);
+}
+
+.subtask-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.subtask-header-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.subtask-header-count {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.subtask-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.subtask-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  transition: background var(--transition);
+}
+
+.subtask-item:hover {
+  background: var(--surface-hover);
+}
+
+.subtask-checkbox {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: color var(--transition);
+}
+
+.subtask-checkbox.checked {
+  color: var(--green);
+}
+
+.subtask-title {
+  font-size: 0.82rem;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.subtask-item.done .subtask-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+/* ── Subtasks (card-level chip) ────────────────────────────────── */
+
+.subtask-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+.subtask-chip-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.subtask-count-inline {
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Card banner image ─────────────────────────────────────────── */
 .card-banner {
   border-radius: var(--radius) var(--radius) 0 0;

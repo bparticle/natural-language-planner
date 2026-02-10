@@ -422,6 +422,7 @@ def create_task(
             - dependencies (list[str], task IDs)
             - progress (int, 0–100, completion percentage)
             - notes (list[str])
+            - subtasks (list[str], checklist items — all start unchecked)
 
     Returns:
         The generated task ID on success, or None on failure.
@@ -487,6 +488,18 @@ def create_task(
         body_parts.append("## Notes\n" + "\n".join(f"- {n}" for n in notes))
     else:
         body_parts.append("## Notes\n")
+
+    # Subtasks — optional checklist for breaking work into smaller steps
+    subtasks = details.get("subtasks", [])
+    if subtasks:
+        body_parts.append(
+            "## Subtasks\n" + "\n".join(f"- [ ] {s}" for s in subtasks)
+        )
+        # Auto-calculate progress from subtasks (all unchecked → 0)
+        meta["progress"] = 0
+    else:
+        body_parts.append("## Subtasks\n")
+
     body_parts.append("## Attachments\n")
 
     # Agent Tips — AI-generated suggestions, kept separate from user content
@@ -574,7 +587,15 @@ def update_task(task_id: str, updates: dict[str, Any]) -> bool:
     _sync_field_aliases(updates, meta)
 
     meta.update(updates)
-    content = serialize_frontmatter(meta, new_body if new_body is not None else body)
+
+    # Auto-sync progress from subtasks when they exist
+    final_body = new_body if new_body is not None else body
+    subtasks = _parse_subtasks(final_body)
+    if subtasks:
+        done = sum(1 for s in subtasks if s["done"])
+        meta["progress"] = round(done / len(subtasks) * 100)
+
+    content = serialize_frontmatter(meta, final_body)
     return safe_write_file(path, content)
 
 
@@ -638,6 +659,12 @@ def list_tasks(
             thumb = _extract_first_image(body)
             if thumb:
                 meta["thumbnail"] = thumb
+
+            # Enrich with subtask counts for card-level display
+            subtasks = _parse_subtasks(body)
+            if subtasks:
+                meta["subtask_count"] = len(subtasks)
+                meta["subtask_done"] = sum(1 for s in subtasks if s["done"])
 
             if _matches_filter(meta, filter_by):
                 tasks.append(meta)
@@ -919,6 +946,164 @@ def get_task_agent_tips(task_id: str) -> list[str]:
     return tips
 
 
+# ── Subtasks ───────────────────────────────────────────────────────
+
+def get_subtasks(task_id: str) -> list[dict[str, Any]]:
+    """
+    Read the subtask checklist from a task.
+
+    Parses the ``## Subtasks`` body section for GitHub-flavoured checkbox
+    lines (``- [x] Done item``, ``- [ ] Pending item``).
+
+    Args:
+        task_id: The task identifier.
+
+    Returns:
+        List of dicts ``[{"title": str, "done": bool}, ...]``,
+        or an empty list if the task has no subtasks.
+
+    Example:
+        >>> get_subtasks("task-001")
+        [{'title': 'Research competitors', 'done': True},
+         {'title': 'Create wireframes', 'done': False}]
+    """
+    task = get_task(task_id)
+    if task is None:
+        return []
+    return _parse_subtasks(task.get("body", ""))
+
+
+def update_subtasks(task_id: str, subtasks: list[dict[str, Any]]) -> bool:
+    """
+    Rewrite the ``## Subtasks`` section with a new list.
+
+    Each item in *subtasks* must have ``title`` (str) and ``done`` (bool).
+    The task's ``progress`` field is automatically recalculated.
+
+    Args:
+        task_id: The task identifier.
+        subtasks: Full replacement list of subtask dicts.
+
+    Returns:
+        True if the task was updated successfully.
+
+    Example:
+        >>> update_subtasks("task-001", [
+        ...     {"title": "Research competitors", "done": True},
+        ...     {"title": "Create wireframes", "done": False},
+        ... ])
+        True
+    """
+    path = _find_task_file(task_id)
+    if path is None:
+        logger.error("Task '%s' not found.", task_id)
+        return False
+
+    raw = safe_read_file(path)
+    if raw is None:
+        return False
+
+    meta, body = parse_frontmatter(raw)
+    body = _replace_subtasks_section(body, subtasks)
+
+    # Auto-sync progress
+    if subtasks:
+        done = sum(1 for s in subtasks if s["done"])
+        meta["progress"] = round(done / len(subtasks) * 100)
+    else:
+        meta["progress"] = 0
+
+    content = serialize_frontmatter(meta, body)
+    return safe_write_file(path, content)
+
+
+def toggle_subtask(task_id: str, index: int) -> bool:
+    """
+    Flip a single subtask's done/not-done state by its zero-based index.
+
+    Args:
+        task_id: The task identifier.
+        index: Zero-based index of the subtask to toggle.
+
+    Returns:
+        True if the toggle was saved successfully.
+
+    Example:
+        >>> toggle_subtask("task-001", 0)   # marks first subtask done
+        True
+    """
+    path = _find_task_file(task_id)
+    if path is None:
+        logger.error("Task '%s' not found.", task_id)
+        return False
+
+    raw = safe_read_file(path)
+    if raw is None:
+        return False
+
+    meta, body = parse_frontmatter(raw)
+    subtasks = _parse_subtasks(body)
+
+    if index < 0 or index >= len(subtasks):
+        logger.error("Subtask index %d out of range (task has %d subtasks).", index, len(subtasks))
+        return False
+
+    subtasks[index]["done"] = not subtasks[index]["done"]
+    body = _replace_subtasks_section(body, subtasks)
+
+    # Auto-sync progress
+    done = sum(1 for s in subtasks if s["done"])
+    meta["progress"] = round(done / len(subtasks) * 100)
+
+    content = serialize_frontmatter(meta, body)
+    return safe_write_file(path, content)
+
+
+def add_subtasks(task_id: str, titles: list[str]) -> bool:
+    """
+    Append new unchecked subtasks to an existing task.
+
+    If the task doesn't already have a ``## Subtasks`` section one is
+    created.  Progress is recalculated after adding.
+
+    Args:
+        task_id: The task identifier.
+        titles: List of subtask title strings to append (all start unchecked).
+
+    Returns:
+        True if the subtasks were added successfully.
+
+    Example:
+        >>> add_subtasks("task-001", ["Write tests", "Update docs"])
+        True
+    """
+    if not titles:
+        return True  # nothing to do
+
+    path = _find_task_file(task_id)
+    if path is None:
+        logger.error("Task '%s' not found.", task_id)
+        return False
+
+    raw = safe_read_file(path)
+    if raw is None:
+        return False
+
+    meta, body = parse_frontmatter(raw)
+    existing = _parse_subtasks(body)
+    new_items = [{"title": t, "done": False} for t in titles]
+    all_subtasks = existing + new_items
+
+    body = _replace_subtasks_section(body, all_subtasks)
+
+    # Auto-sync progress
+    done = sum(1 for s in all_subtasks if s["done"])
+    meta["progress"] = round(done / len(all_subtasks) * 100)
+
+    content = serialize_frontmatter(meta, body)
+    return safe_write_file(path, content)
+
+
 # ── Internal helpers ───────────────────────────────────────────────
 
 _IMG_LINK_RE = re.compile(
@@ -1024,3 +1209,54 @@ def _matches_filter(meta: dict[str, Any], filter_by: dict[str, Any]) -> bool:
             if meta.get(key) != value:
                 return False
     return True
+
+
+# Regex for parsing GitHub-flavoured markdown checkboxes
+_SUBTASK_RE = re.compile(r"^- \[([ xX])\] (.+)$", re.MULTILINE)
+
+
+def _parse_subtasks(body: str) -> list[dict[str, Any]]:
+    """
+    Parse the ``## Subtasks`` section from a task body.
+
+    Returns a list of ``{"title": str, "done": bool}`` dicts, or an
+    empty list if the section is absent or empty.
+    """
+    if "## Subtasks" not in body:
+        return []
+
+    section = body.split("## Subtasks")[1].split("\n## ")[0]
+    items: list[dict[str, Any]] = []
+    for m in _SUBTASK_RE.finditer(section):
+        items.append({"title": m.group(2).strip(), "done": m.group(1) in ("x", "X")})
+    return items
+
+
+def _render_subtasks(subtasks: list[dict[str, Any]]) -> str:
+    """Render a subtask list back to markdown checkbox format."""
+    if not subtasks:
+        return ""
+    lines = []
+    for s in subtasks:
+        mark = "x" if s.get("done") else " "
+        lines.append(f"- [{mark}] {s['title']}")
+    return "\n".join(lines)
+
+
+def _replace_subtasks_section(body: str, subtasks: list[dict[str, Any]]) -> str:
+    """Replace (or insert) the ``## Subtasks`` section in a task body."""
+    rendered = _render_subtasks(subtasks)
+
+    if "## Subtasks" in body:
+        before = body.split("## Subtasks")[0]
+        after_parts = body.split("## Subtasks")[1].split("\n## ", 1)
+        after_section = "\n## " + after_parts[1] if len(after_parts) > 1 else ""
+        return f"{before}## Subtasks\n{rendered}{after_section}"
+    else:
+        # Insert before ## Attachments if present, else append
+        if "## Attachments" in body:
+            before = body.split("## Attachments")[0]
+            rest = body.split("## Attachments")[1]
+            return f"{before}## Subtasks\n{rendered}\n\n## Attachments{rest}"
+        else:
+            return f"{body.rstrip()}\n\n## Subtasks\n{rendered}"

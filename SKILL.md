@@ -67,6 +67,7 @@ about work they need to do, are doing, or have finished.
 | "This is related to…", "Part of the… project" | **Link / move** | `move_task(...)` or `link_tasks(...)` |
 | "Cancel…", "Nevermind about…", "Drop the…" | **Archive** | `archive_task(...)` |
 | "I'm about halfway through…", "Almost done with…", "80% done" | **Progress update** | `update_task(id, {"progress": N})` (0–100) |
+| "Break this down…", "This is a big task", complex multi-step requests | **Suggest subtasks** | Offer breakdown, then `create_task(…, details={"subtasks": […]})` or `add_subtasks(id, [...])` |
 | "Show me what I'm working on", "What's on my plate?" | **Overview** | List tasks / offer dashboard |
 
 ### Task creation workflow
@@ -114,7 +115,7 @@ user succeed at this task and prepare **2–4 tips** covering any of:
 - **Inspiration** — creative ideas, reference projects, or lateral thinking.
 
 This step is **not optional**. Every new task should ship with agent tips.
-See **Section 5** for detailed guidance on writing great tips.
+See **Section 6** for detailed guidance on writing great tips.
 
 #### Step 3 — Create the task
 
@@ -258,9 +259,147 @@ update_task("task-001", {
 })
 ```
 
+5. **Subtask auto-progress** — when a task has subtasks, progress is
+   **automatically calculated** from the subtask completion ratio. You
+   don't need to manually set `progress` for tasks with subtasks; instead,
+   use `toggle_subtask()` or `update_subtasks()` and progress updates
+   itself.  See Section 5 below for details.
+
 ---
 
-## 5. Agent Tips & Ideas — Detailed Guide
+## 5. Subtasks — Breaking Down Big Tasks
+
+Subtasks let the user (and you) decompose a large task into a checklist of
+smaller steps.  They are stored as GitHub-flavoured checkboxes in the
+task's `## Subtasks` body section and displayed as a clean checklist in the
+dashboard.  When subtasks exist, the task's **progress is auto-calculated**
+from the completion ratio — no manual percentage needed.
+
+### When to suggest subtasks
+
+**Proactively assess complexity** every time you create or discuss a task.
+Suggest subtasks when:
+
+- The task description implies **3 or more distinct steps** or phases.
+- The user says things like "big project", "lots of parts", "complex",
+  "there are several things I need to do".
+- The task title is broad or high-level (e.g., "Redesign the website"
+  vs. "Fix button colour").
+- During check-ins: a task has been `in-progress` for a while with low
+  progress and no subtasks — breaking it down may help.
+
+### Confirmation flow — offer, don't force
+
+Always ask before creating subtasks.  Use a natural, conversational tone:
+
+- **At creation time:**
+  > "That sounds like a big job! Want me to break it into smaller
+  > subtasks?  I'm thinking something like:
+  > 1. Research competitor landing pages
+  > 2. Create wireframe mockups
+  > 3. Build responsive prototype
+  > 4. Get feedback from the team"
+
+- **Simpler version:**
+  > "This could be easier to track with subtasks — want me to split it up?"
+
+- **During check-ins:**
+  > "I notice you've been working on this for a while.  Would it help to
+  > break the remaining work into subtasks?"
+
+- **Minimal prompt (for obvious cases):**
+  > "Want me to add subtasks to this one?"
+
+If the user says **yes**, create the task (or update the existing one) with
+the subtask list.  If **no**, proceed normally without subtasks.
+
+### Creating tasks with subtasks
+
+Pass a `subtasks` list (strings) in the `details` dict.  All items start
+unchecked:
+
+```python
+from scripts.file_manager import create_task
+create_task(
+    "Redesign the homepage",
+    project_id="website-redesign",
+    details={
+        "description": "Full redesign of the landing page",
+        "priority": "high",
+        "due": "2026-03-01",
+        "tags": ["design", "frontend"],
+        "subtasks": [
+            "Research competitor landing pages",
+            "Create wireframe mockups",
+            "Build responsive prototype",
+            "Get feedback from the team",
+        ],
+        "agent_tips": [
+            "Start mobile-first — most traffic is from phones",
+            "Use Figma for collaborative wireframing",
+        ],
+    }
+)
+```
+
+### Adding subtasks to an existing task
+
+If the user later decides to break a task down, use `add_subtasks()`:
+
+```python
+from scripts.file_manager import add_subtasks
+add_subtasks("task-003", [
+    "Set up CI configuration",
+    "Add unit test stage",
+    "Add deployment stage",
+])
+```
+
+### Completing subtasks
+
+When the user says they've finished a specific step, toggle it:
+
+```python
+from scripts.file_manager import toggle_subtask
+toggle_subtask("task-003", 0)   # marks the first subtask done
+```
+
+You can also read and rewrite the full list:
+
+```python
+from scripts.file_manager import get_subtasks, update_subtasks
+subs = get_subtasks("task-003")
+subs[1]["done"] = True
+update_subtasks("task-003", subs)
+```
+
+### Progress from subtasks
+
+When a task has subtasks, its `progress` field is **automatically kept in
+sync**: `progress = round(done_count / total_count * 100)`.
+
+- You do **not** need to manually set progress on tasks with subtasks.
+- The dashboard shows subtask counts (e.g., "3/5") alongside the progress
+  bar and a full checklist in the detail modal.
+- During check-ins, ask about **specific subtasks** by name:
+  > "How's the wireframe going?  Can I check that off?"
+
+### Subtask best practices
+
+1. **Keep it focused** — 3–7 subtasks is the sweet spot.  More than 10
+   starts to feel overwhelming; if a task needs more, consider splitting
+   it into multiple tasks or a project.
+2. **Action-oriented titles** — each subtask should start with a verb:
+   "Research…", "Create…", "Review…", "Set up…".
+3. **Sequential when possible** — order subtasks in the sequence the user
+   would naturally tackle them.
+4. **Don't micro-manage** — subtasks are for meaningful chunks of work,
+   not every tiny step.  "Write the header component" is good;
+   "Open VS Code" is not.
+
+---
+
+## 6. Agent Tips & Ideas — Detailed Guide
 
 Agent Tips are a **core part of every task**, not an afterthought. Step 2 of
 the task creation workflow (Section 2) requires you to prepare 2–4 tips
@@ -361,7 +500,7 @@ tips = get_task_agent_tips("task-001")
 
 ---
 
-## 6. Weekly Focus
+## 7. Weekly Focus
 
 When the user tells you what they're working on this week, or you detect
 weekly planning intent:
@@ -406,7 +545,7 @@ update_task("task-002", {"status": "in-progress", "last_checkin": today_str()})
 
 ---
 
-## 7. Handling Images & Attachments
+## 8. Handling Images & Attachments
 
 When the user shares an image or references a file in conversation:
 
@@ -459,7 +598,7 @@ PNG, JPG, JPEG, GIF, WebP, SVG, BMP — all displayed inline in the gallery.
 
 ---
 
-## 8. Dashboard
+## 9. Dashboard
 
 The skill includes a local web dashboard for a visual overview.
 
@@ -809,7 +948,7 @@ sudo systemctl daemon-reload
 
 ---
 
-## 9. Common Operations Reference
+## 10. Common Operations Reference
 
 ### Create a project
 
@@ -920,9 +1059,55 @@ archive_task("task-003")
 archive_project("old-project")
 ```
 
+### Create a task with subtasks
+
+```python
+from scripts.file_manager import create_task
+task_id = create_task(
+    "Redesign the homepage",
+    project_id="website-redesign",
+    details={
+        "description": "Full redesign of the landing page",
+        "priority": "high",
+        "subtasks": [
+            "Research competitor landing pages",
+            "Create wireframe mockups",
+            "Build responsive prototype",
+            "Get feedback from the team",
+        ],
+        "agent_tips": [
+            "Start mobile-first — most traffic is from phones",
+        ],
+    }
+)
+```
+
+### Add subtasks to an existing task
+
+```python
+from scripts.file_manager import add_subtasks
+add_subtasks("task-003", ["Write tests", "Update docs"])
+```
+
+### Toggle a subtask done/undone
+
+```python
+from scripts.file_manager import toggle_subtask
+toggle_subtask("task-003", 0)  # flip the first subtask
+```
+
+### Read and rewrite subtasks
+
+```python
+from scripts.file_manager import get_subtasks, update_subtasks
+subs = get_subtasks("task-003")
+subs[2]["done"] = True
+update_subtasks("task-003", subs)
+```
+
 ---
 
-## 10. Configuration
+## 11. Configuration
 
 Settings are stored in `.nlplanner/config.json`. The user can adjust:
 
@@ -942,7 +1127,7 @@ current = get_setting("dashboard_port")  # 8080
 
 ---
 
-## 11. Communication Style
+## 12. Communication Style
 
 Follow these guidelines when talking to the user about their tasks:
 
@@ -957,7 +1142,7 @@ Follow these guidelines when talking to the user about their tasks:
 
 ---
 
-## 12. Error Handling
+## 13. Error Handling
 
 - If the workspace isn't set up, offer to initialise it.
 - If a file operation fails, tell the user plainly and suggest a fix.
@@ -966,7 +1151,7 @@ Follow these guidelines when talking to the user about their tasks:
 
 ---
 
-## 13. Data Principles
+## 14. Data Principles
 
 - **Local-first**: All data lives on the user's machine. No cloud services.
 - **Human-readable**: Everything is Markdown + YAML. Users can edit files
@@ -976,7 +1161,7 @@ Follow these guidelines when talking to the user about their tasks:
 
 ---
 
-## 14. Example Conversation
+## 15. Example Conversation
 
 **User**: "I need to redesign the company website. The homepage needs a
 fresh look, the about page needs updating, and we should improve mobile
@@ -1020,7 +1205,7 @@ Friday."
 
 ---
 
-## 15. Technical Notes
+## 16. Technical Notes
 
 ### Dependencies
 

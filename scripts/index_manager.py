@@ -7,6 +7,7 @@ due-date checks, and check-in lookups are fast even with many tasks.
 
 import json
 import logging
+import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
@@ -66,11 +67,9 @@ def rebuild_index() -> bool:
             continue
         meta, body = parse_frontmatter(raw)
         tid = meta.get("id", task_file.stem)
-        _index["tasks"][tid] = {
-            **meta,
-            "_body": body,
-            "_path": str(task_file),
-        }
+        entry = {**meta, "_body": body, "_path": str(task_file)}
+        _enrich_subtask_counts(entry, body)
+        _index["tasks"][tid] = entry
 
     # Also index archived tasks for search
     archive_dir = root / "archive"
@@ -81,12 +80,9 @@ def rebuild_index() -> bool:
                 continue
             meta, body = parse_frontmatter(raw)
             tid = meta.get("id", task_file.stem)
-            _index["tasks"][tid] = {
-                **meta,
-                "_body": body,
-                "_path": str(task_file),
-                "_archived": True,
-            }
+            entry = {**meta, "_body": body, "_path": str(task_file), "_archived": True}
+            _enrich_subtask_counts(entry, body)
+            _index["tasks"][tid] = entry
 
     # Persist to disk
     _persist_index(root)
@@ -328,6 +324,20 @@ def _ensure_index() -> None:
 def _clean_task(task: dict[str, Any]) -> dict[str, Any]:
     """Return a copy of task metadata without internal fields."""
     return {k: v for k, v in task.items() if not k.startswith("_")}
+
+
+_SUBTASK_RE = re.compile(r"^- \[([ xX])\] (.+)$", re.MULTILINE)
+
+
+def _enrich_subtask_counts(entry: dict[str, Any], body: str) -> None:
+    """Parse subtasks from body and add count fields to the index entry."""
+    if "## Subtasks" not in body:
+        return
+    section = body.split("## Subtasks")[1].split("\n## ")[0]
+    items = _SUBTASK_RE.findall(section)
+    if items:
+        entry["subtask_count"] = len(items)
+        entry["subtask_done"] = sum(1 for mark, _ in items if mark in ("x", "X"))
 
 
 def _persist_index(root: Path) -> None:
