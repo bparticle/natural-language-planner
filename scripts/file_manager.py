@@ -28,6 +28,49 @@ from .config_manager import load_config, save_config, set_config_path
 
 logger = logging.getLogger("nlplanner.files")
 
+# ── Field alias mapping ───────────────────────────────────────────
+# Some frontmatter fields have legacy or alternate names.  When one
+# version is updated the other must stay in sync to prevent stale data.
+# Mapping: alias → canonical field name.
+
+_FIELD_ALIASES: dict[str, str] = {
+    "project_id": "project",
+}
+
+# Reverse lookup: canonical → [aliases]
+_CANONICAL_TO_ALIASES: dict[str, list[str]] = {}
+for _alias, _canon in _FIELD_ALIASES.items():
+    _CANONICAL_TO_ALIASES.setdefault(_canon, []).append(_alias)
+
+
+def _sync_field_aliases(
+    updates: dict[str, Any], meta: dict[str, Any]
+) -> None:
+    """Ensure aliased / legacy fields are kept in sync inside *updates*.
+
+    Rules:
+    1. If the caller supplied an alias (e.g. ``project_id``) but not the
+       canonical field (``project``), copy the value to the canonical key.
+    2. If the caller supplied the canonical field but not the alias, copy
+       the value to the alias **only if the alias already exists in the
+       current frontmatter** (avoids introducing new stale fields).
+    3. If both are supplied, the canonical value wins.
+    """
+    for alias, canonical in _FIELD_ALIASES.items():
+        has_alias = alias in updates
+        has_canonical = canonical in updates
+
+        if has_alias and has_canonical:
+            # Canonical wins — force alias to match
+            updates[alias] = updates[canonical]
+        elif has_alias and not has_canonical:
+            # Propagate alias → canonical
+            updates[canonical] = updates[alias]
+        elif has_canonical and not has_alias:
+            # Propagate canonical → alias only if it already exists
+            if alias in meta:
+                updates[alias] = updates[canonical]
+
 # ── Project colour palette ─────────────────────────────────────────
 # A curated set of accent colours that work well in both light and
 # dark mode.  When a new project is created, the next unused colour
@@ -527,6 +570,9 @@ def update_task(task_id: str, updates: dict[str, Any]) -> bool:
             logger.warning("Invalid progress '%s'; ignoring.", p)
             del updates["progress"]
 
+    # Keep aliased / legacy fields in sync (e.g. project ↔ project_id)
+    _sync_field_aliases(updates, meta)
+
     meta.update(updates)
     content = serialize_frontmatter(meta, new_body if new_body is not None else body)
     return safe_write_file(path, content)
@@ -760,7 +806,9 @@ def move_task(task_id: str, target_project_id: str) -> bool:
         return False
 
     meta, body = parse_frontmatter(raw)
-    meta["project"] = target_project_id
+    move_updates: dict[str, Any] = {"project": target_project_id}
+    _sync_field_aliases(move_updates, meta)
+    meta.update(move_updates)
     content = serialize_frontmatter(meta, body)
 
     dest_path = target_dir / src_path.name
