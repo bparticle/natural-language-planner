@@ -8,11 +8,11 @@ works whether the skill is:
   - Bundled inside the OpenClaw pnpm global package
   - Run directly from a local clone / checkout
 
-Override the skill location with the NLP_SKILL_PATH environment variable
-if auto-detection doesn't suit your setup.
+Override the skill location:
+    NLP_SKILL_PATH=/path/to/skill  (or SKILL_PATH=/path/to/skill)
 
 Usage:
-    python dashboard-daemon.py [--port PORT] [--network] [workspace_path]
+    python dashboard-daemon.py [--port PORT] [--network] [--no-strict-port] [workspace_path]
 """
 
 import argparse
@@ -52,14 +52,14 @@ def resolve_skill_root() -> Path:
     Find the skill root using the same resolution order as
     ``config_manager.get_skill_root()``.
     """
-    # 1. Explicit env var
-    env = os.environ.get("NLP_SKILL_PATH")
+    # 1. Explicit env var (NLP_SKILL_PATH takes priority, SKILL_PATH as alias)
+    env = os.environ.get("NLP_SKILL_PATH") or os.environ.get("SKILL_PATH")
     if env:
         p = Path(env).expanduser().resolve()
         if _is_skill_root(p):
             return p
         print(
-            f"ERROR: NLP_SKILL_PATH='{env}' does not contain the expected "
+            f"ERROR: Skill path '{env}' does not contain the expected "
             "skill files (SKILL.md, scripts/, templates/).",
             file=sys.stderr,
         )
@@ -87,7 +87,7 @@ def resolve_skill_root() -> Path:
         return here
 
     searched = [
-        f"  - NLP_SKILL_PATH env var (not set)",
+        f"  - NLP_SKILL_PATH / SKILL_PATH env var (not set)",
         f"  - {openclaw_path}",
         f"  - pnpm global root ({pnpm_root or 'pnpm not found'})",
         f"  - {here}",
@@ -95,7 +95,7 @@ def resolve_skill_root() -> Path:
     print(
         "ERROR: Could not locate the natural-language-planner skill.\n"
         "Searched:\n" + "\n".join(searched) + "\n\n"
-        "Set the NLP_SKILL_PATH environment variable to the directory "
+        "Set NLP_SKILL_PATH (or SKILL_PATH) to the directory "
         "containing SKILL.md, scripts/, and templates/.",
         file=sys.stderr,
     )
@@ -108,13 +108,17 @@ def main() -> None:
     )
     parser.add_argument("--port", type=int, default=None, help="Port (default: 8080)")
     parser.add_argument("--network", action="store_true", help="Bind to all interfaces (0.0.0.0)")
+    parser.add_argument(
+        "--no-strict-port", dest="strict_port", action="store_false",
+        help="Allow fallback to the next free port if the requested port is busy "
+             "(default: fail if port is unavailable)",
+    )
     parser.add_argument("workspace_path", nargs="?", default=None, help="Workspace directory")
     args = parser.parse_args()
 
     skill_root = resolve_skill_root()
     print(f"Skill root: {skill_root}")
 
-    # Ensure the skill's scripts package is importable
     if str(skill_root) not in sys.path:
         sys.path.insert(0, str(skill_root))
 
@@ -136,7 +140,16 @@ def main() -> None:
             sys.exit(1)
 
     allow_network = args.network or None
-    url = start_dashboard(port=args.port, allow_network=allow_network)
+    try:
+        url = start_dashboard(
+            port=args.port,
+            allow_network=allow_network,
+            strict_port=args.strict_port,
+        )
+    except RuntimeError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
     if url:
         print(f"Dashboard running at {url}")
         print("Press Ctrl+C to stop.")

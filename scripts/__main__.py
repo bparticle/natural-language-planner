@@ -46,6 +46,10 @@ def main() -> None:
     p_dash = sub.add_parser("dashboard", help="Start the dashboard server")
     p_dash.add_argument("--port", type=int, default=None, help="Port (default: 8080)")
     p_dash.add_argument("--network", action="store_true", help="Bind to all interfaces (0.0.0.0)")
+    p_dash.add_argument(
+        "--no-strict-port", dest="strict_port", action="store_false",
+        help="Allow fallback to next free port if requested port is busy",
+    )
     p_dash.add_argument("workspace_path", nargs="?", default=None, help="Workspace directory")
 
     # list-tasks
@@ -102,7 +106,16 @@ def main() -> None:
     elif args.command == "dashboard":
         _ensure_workspace(args)
         allow_network = getattr(args, "network", False)
-        url = start_dashboard(port=args.port, allow_network=allow_network or None)
+        strict_port = getattr(args, "strict_port", True)
+        try:
+            url = start_dashboard(
+                port=args.port,
+                allow_network=allow_network or None,
+                strict_port=strict_port,
+            )
+        except RuntimeError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            sys.exit(1)
         if url:
             print(f"Dashboard running at {url}")
             print("Press Ctrl+C to stop.")

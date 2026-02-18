@@ -287,17 +287,17 @@ def get_skill_root() -> Path:
     if _skill_root_cache is not None:
         return _skill_root_cache
 
-    # 1. Explicit env var
-    env = os.environ.get("NLP_SKILL_PATH")
+    # 1. Explicit env var (NLP_SKILL_PATH takes priority, SKILL_PATH as alias)
+    env = os.environ.get("NLP_SKILL_PATH") or os.environ.get("SKILL_PATH")
     if env:
         p = Path(env).expanduser().resolve()
         if _is_skill_root(p):
             _skill_root_cache = p
-            logger.info("Skill root (from NLP_SKILL_PATH): %s", p)
+            logger.info("Skill root (from env): %s", p)
             return p
         raise FileNotFoundError(
-            f"NLP_SKILL_PATH is set to '{env}' but that directory does not "
-            "contain the expected skill files (SKILL.md, scripts/, templates/)."
+            f"Skill path env var is set to '{env}' but that directory does "
+            "not contain the expected skill files (SKILL.md, scripts/, templates/)."
         )
 
     # 2. Standard OpenClaw skill directory
@@ -331,11 +331,11 @@ def get_skill_root() -> Path:
     raise FileNotFoundError(
         "Could not locate the natural-language-planner skill.\n"
         "Searched:\n"
-        f"  - NLP_SKILL_PATH env var (not set)\n"
+        f"  - NLP_SKILL_PATH / SKILL_PATH env var (not set)\n"
         f"  - {openclaw_path}\n"
         f"  - pnpm global root ({pnpm_root or 'pnpm not found'})\n"
         f"  - {relative}\n"
-        "Set the NLP_SKILL_PATH environment variable to the directory "
+        "Set NLP_SKILL_PATH (or SKILL_PATH) to the directory "
         "containing SKILL.md, scripts/, and templates/."
     )
 

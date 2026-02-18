@@ -354,20 +354,27 @@ def _get_lan_ip() -> str:
 
 # ── Public functions ──────────────────────────────────────────────
 
-def start_dashboard(port: Optional[int] = None, allow_network: Optional[bool] = None) -> str:
+def start_dashboard(
+    port: Optional[int] = None,
+    allow_network: Optional[bool] = None,
+    strict_port: bool = True,
+) -> str:
     """
     Start the dashboard web server in a background thread.
-
-    If the requested port is occupied, automatically tries the next
-    consecutive ports until one is available.
 
     Args:
         port: Port number (default: from config or 8080).
         allow_network: If True, bind to 0.0.0.0 (all interfaces).
                        If None, reads from config.
+        strict_port: If True (default), fail when the requested port is
+                     unavailable instead of falling back to the next free
+                     port.  Set to False to allow automatic fallback.
 
     Returns:
         The dashboard URL, or empty string on failure.
+
+    Raises:
+        RuntimeError: If *strict_port* is True and the port is unavailable.
 
     Example:
         >>> url = start_dashboard()
@@ -396,16 +403,26 @@ def start_dashboard(port: Optional[int] = None, allow_network: Optional[bool] = 
         return ""
     handler = partial(DashboardHandler, dashboard_dir=dashboard_dir)
 
-    # Try the configured port first, then search for an available one
-    try:
-        actual_port = _find_available_port(host, port)
-        if actual_port != port:
-            logger.info(
-                "Port %d is occupied, using port %d instead.", port, actual_port
+    if strict_port:
+        if not _is_port_available(host, port):
+            raise RuntimeError(
+                f"Port {port} is unavailable (strict_port=True). "
+                f"Free the port or set strict_port=False to allow fallback.\n"
+                f"  Check what is using it: lsof -i :{port}  or  "
+                f"ss -tlnp sport = :{port}"
             )
-    except OSError as e:
-        logger.error("Could not find an available port: %s", e)
-        return ""
+        actual_port = port
+    else:
+        try:
+            actual_port = _find_available_port(host, port)
+            if actual_port != port:
+                logger.warning(
+                    "Port %d is occupied, falling back to port %d.",
+                    port, actual_port,
+                )
+        except OSError as e:
+            logger.error("Could not find an available port: %s", e)
+            return ""
 
     try:
         _server = HTTPServer((host, actual_port), handler)
@@ -422,22 +439,28 @@ def start_dashboard(port: Optional[int] = None, allow_network: Optional[bool] = 
         url = f"http://{lan_ip}:{actual_port}"
     else:
         url = f"http://localhost:{actual_port}"
-    logger.info("Dashboard started at %s (serving from %s)", url, dashboard_dir)
+    logger.info(
+        "Dashboard started at %s (serving from %s, strict_port=%s)",
+        url, dashboard_dir, strict_port,
+    )
 
-    # Persist the actual port so subsequent calls know where it is
     if actual_port != port:
         set_setting("dashboard_port", actual_port)
 
     return url
 
 
-def ensure_dashboard(port: Optional[int] = None, allow_network: Optional[bool] = None) -> str:
+def ensure_dashboard(
+    port: Optional[int] = None,
+    allow_network: Optional[bool] = None,
+    strict_port: bool = True,
+) -> str:
     """
     Ensure the dashboard is running and healthy.
 
     This is the recommended function for the agent to call. It:
     1. Returns the existing URL if the server is already running.
-    2. Starts a new server if not running, with automatic port recovery.
+    2. Starts a new server if not running.
     3. Verifies the server is responsive.
 
     Args:
@@ -445,6 +468,8 @@ def ensure_dashboard(port: Optional[int] = None, allow_network: Optional[bool] =
         allow_network: If True, bind to all interfaces (``0.0.0.0``)
                        so the dashboard is reachable from other devices
                        on the LAN.  If None, reads from config.
+        strict_port: If True (default), fail when the port is unavailable.
+                     If False, fall back to the next free port.
 
     Returns:
         The dashboard URL, or empty string on failure.
@@ -457,7 +482,7 @@ def ensure_dashboard(port: Optional[int] = None, allow_network: Optional[bool] =
     if is_running():
         return get_dashboard_url()
 
-    url = start_dashboard(port=port, allow_network=allow_network)
+    url = start_dashboard(port=port, allow_network=allow_network, strict_port=strict_port)
     if not url:
         return ""
 
@@ -488,7 +513,10 @@ def stop_dashboard() -> None:
     logger.info("Dashboard stopped.")
 
 
-def restart_dashboard(allow_network: Optional[bool] = None) -> str:
+def restart_dashboard(
+    allow_network: Optional[bool] = None,
+    strict_port: bool = True,
+) -> str:
     """
     Stop and restart the dashboard server on the **same port**.
 
@@ -501,6 +529,7 @@ def restart_dashboard(allow_network: Optional[bool] = None) -> str:
     Args:
         allow_network: If True, bind to all interfaces (``0.0.0.0``).
                        If None, reads from config.
+        strict_port: If True (default), fail when the port is unavailable.
 
     Returns:
         The new dashboard URL, or empty string on failure.
@@ -512,7 +541,7 @@ def restart_dashboard(allow_network: Optional[bool] = None) -> str:
     """
     port = get_dashboard_port() or None
     stop_dashboard()
-    return ensure_dashboard(port=port, allow_network=allow_network)
+    return ensure_dashboard(port=port, allow_network=allow_network, strict_port=strict_port)
 
 
 def get_dashboard_url() -> str:

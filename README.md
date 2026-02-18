@@ -192,14 +192,58 @@ The export inlines all CSS, JS, and data into a single `index.html` that
 works without a server. Note that exports are snapshots — re-export after
 changes for an updated version.
 
+## Startup & Port Locking
+
+The dashboard locks to port **8080 by default**. If the port is already in
+use the server will **fail immediately** with a clear error instead of
+silently falling back to another port.
+
+To allow automatic fallback (not recommended for production), pass
+`--no-strict-port`:
+
+```bash
+python -m scripts dashboard --no-strict-port ~/nlplanner
+```
+
+### Freeing a stuck port
+
+```bash
+# Linux / macOS
+lsof -i :8080
+kill <PID>
+
+# Windows
+netstat -ano | findstr :8080
+taskkill /PID <PID> /F
+```
+
+### Using a different port
+
+Edit `<workspace>/.nlplanner/config.json`:
+
+```json
+{
+  "settings": {
+    "dashboard_port": 9000
+  }
+}
+```
+
+Or pass `--port`:
+
+```bash
+python -m scripts dashboard --port 9000 ~/nlplanner
+```
+
 ## Environment Variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `NLP_SKILL_PATH` | *(auto-detected)* | Override the skill root directory. Set this if the skill can't be found automatically — point it at the folder containing `SKILL.md`, `scripts/`, and `templates/`. |
+| `NLP_SKILL_PATH` | *(auto-detected)* | Override the skill root directory. Point it at the folder containing `SKILL.md`, `scripts/`, and `templates/`. |
+| `SKILL_PATH` | *(auto-detected)* | Alias for `NLP_SKILL_PATH`. `NLP_SKILL_PATH` takes priority if both are set. |
 
 The skill searches for its own installation in this order:
-1. `NLP_SKILL_PATH` environment variable
+1. `NLP_SKILL_PATH` / `SKILL_PATH` environment variable
 2. `~/.openclaw/skills/natural-language-planner`
 3. pnpm global `node_modules` (for OpenClaw bundled installs)
 4. Relative to the running script
@@ -235,6 +279,24 @@ natural-language-planner/
 ├── tests/                # Unit tests
 └── examples/             # Sample data and conversations
 ```
+
+## Troubleshooting
+
+**"Skill not found"**
+- Verify the skill directory exists: `ls ~/.openclaw/skills/natural-language-planner`
+- Or set the path explicitly: `export NLP_SKILL_PATH=/path/to/natural-language-planner`
+
+**"Port 8080 is unavailable"**
+- Something else is using the port. Find it: `lsof -i :8080` (Linux/macOS) or `netstat -ano | findstr :8080` (Windows)
+- Kill the process and retry, or change the port in config
+
+**"Dashboard not responding"**
+- Check the log: `tail -f /tmp/nlplanner-dashboard.log`
+- Verify the workspace has data: `ls <workspace>/projects/`
+
+**"No workspace specified"**
+- Pass the workspace path: `python -m scripts dashboard ~/nlplanner`
+- Or run `python -m scripts init ~/nlplanner` to create one
 
 ## Contributing
 
