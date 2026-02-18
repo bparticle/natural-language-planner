@@ -7,6 +7,9 @@ Handles loading, saving, and accessing user settings stored in
 
 import json
 import logging
+import os
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, Optional
 
@@ -231,6 +234,110 @@ def get_preference(key: str) -> Any:
     """
     config = load_config()
     return config.get("preferences", {}).get(key)
+
+
+# ── Skill root resolution ──────────────────────────────────────────
+
+_skill_root_cache: Optional[Path] = None
+
+_SKILL_MARKER_FILES = ("SKILL.md", "scripts", "templates")
+
+
+def _is_skill_root(path: Path) -> bool:
+    """Return True if *path* looks like the natural-language-planner skill root."""
+    return all((path / marker).exists() for marker in _SKILL_MARKER_FILES)
+
+
+def _pnpm_global_root() -> Optional[Path]:
+    """Ask pnpm for the global modules root, if available."""
+    pnpm = shutil.which("pnpm")
+    if not pnpm:
+        return None
+    try:
+        result = subprocess.run(
+            [pnpm, "root", "-g"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return Path(result.stdout.strip())
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
+def get_skill_root() -> Path:
+    """
+    Locate the natural-language-planner skill directory.
+
+    Resolution order:
+
+    1. ``NLP_SKILL_PATH`` environment variable (explicit override).
+    2. ``~/.openclaw/skills/natural-language-planner`` (user symlink / install).
+    3. pnpm global ``node_modules`` — scans for the skill bundled inside an
+       OpenClaw package (``pnpm root -g``).
+    4. Relative to this file (``scripts/`` lives inside the skill root).
+
+    Returns:
+        Resolved ``Path`` to the skill root directory.
+
+    Raises:
+        FileNotFoundError: If none of the candidate locations contain the skill.
+    """
+    global _skill_root_cache
+    if _skill_root_cache is not None:
+        return _skill_root_cache
+
+    # 1. Explicit env var
+    env = os.environ.get("NLP_SKILL_PATH")
+    if env:
+        p = Path(env).expanduser().resolve()
+        if _is_skill_root(p):
+            _skill_root_cache = p
+            logger.info("Skill root (from NLP_SKILL_PATH): %s", p)
+            return p
+        raise FileNotFoundError(
+            f"NLP_SKILL_PATH is set to '{env}' but that directory does not "
+            "contain the expected skill files (SKILL.md, scripts/, templates/)."
+        )
+
+    # 2. Standard OpenClaw skill directory
+    openclaw_path = Path.home() / ".openclaw" / "skills" / "natural-language-planner"
+    if _is_skill_root(openclaw_path.resolve()):
+        _skill_root_cache = openclaw_path.resolve()
+        logger.info("Skill root (openclaw dir): %s", _skill_root_cache)
+        return _skill_root_cache
+
+    # 3. pnpm global package (skill bundled inside openclaw)
+    pnpm_root = _pnpm_global_root()
+    if pnpm_root:
+        candidates = [
+            pnpm_root / "natural-language-planner",
+            pnpm_root / "openclaw" / "skills" / "natural-language-planner",
+        ]
+        for pnpm_candidate in candidates:
+            resolved = pnpm_candidate.resolve()
+            if _is_skill_root(resolved):
+                _skill_root_cache = resolved
+                logger.info("Skill root (pnpm global): %s", resolved)
+                return resolved
+
+    # 4. Relative to this file (scripts/ is one level below the skill root)
+    relative = (Path(__file__).parent.parent).resolve()
+    if _is_skill_root(relative):
+        _skill_root_cache = relative
+        logger.info("Skill root (relative): %s", relative)
+        return relative
+
+    raise FileNotFoundError(
+        "Could not locate the natural-language-planner skill.\n"
+        "Searched:\n"
+        f"  - NLP_SKILL_PATH env var (not set)\n"
+        f"  - {openclaw_path}\n"
+        f"  - pnpm global root ({pnpm_root or 'pnpm not found'})\n"
+        f"  - {relative}\n"
+        "Set the NLP_SKILL_PATH environment variable to the directory "
+        "containing SKILL.md, scripts/, and templates/."
+    )
 
 
 # ── Internal helpers ────────────────────────────────────────────────

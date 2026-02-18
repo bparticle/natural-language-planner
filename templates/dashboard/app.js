@@ -74,6 +74,7 @@
     // Modal
     modalOverlay: $("#modal-overlay"),
     modalTitle: $("#modal-title"),
+    modalTaskNumber: $("#modal-task-number"),
     modalStatus: $("#modal-status"),
     modalPriority: $("#modal-priority"),
     modalProject: $("#modal-project"),
@@ -455,6 +456,11 @@
     });
   }
 
+  function taskNumber(id) {
+    const m = (id || "").match(/(\d+)$/);
+    return m ? "#" + m[1] : "";
+  }
+
   function focusCardHTML(task) {
     const isOverdue = task.due && new Date(task.due + "T23:59:59") < new Date();
     const dueLabel = task.due ? formatDate(task.due) : "";
@@ -468,6 +474,7 @@
     const banner = buildBannerUrl(task);
     const pColor = getProjectColor(task.project);
     const borderStyle = pColor ? `style="border-left:3px solid ${esc(pColor)}"` : "";
+    const num = taskNumber(task.id);
 
     return `
       <div class="focus-card ${banner ? "has-banner" : ""}" data-id="${esc(task.id)}" ${borderStyle}>
@@ -476,6 +483,7 @@
           <div class="focus-card-top">
             <div class="focus-card-title">
               <span class="priority-dot priority-${task.priority || "medium"}"></span>
+              ${num ? `<span class="task-number">${num}</span>` : ""}
               ${esc(task.title)}
             </div>
             <div class="focus-card-badges">
@@ -550,6 +558,7 @@
     const banner = buildBannerUrl(task);
     const pColor = getProjectColor(task.project);
     const borderStyle = pColor ? `style="border-left:3px solid ${esc(pColor)}"` : "";
+    const num = taskNumber(task.id);
 
     return `
       <div class="task-card ${banner ? "has-banner" : ""}" data-id="${esc(task.id)}" ${borderStyle}>
@@ -557,6 +566,7 @@
         <div class="task-card-body">
           <div class="task-card-title">
             <span class="priority-dot priority-${task.priority || "medium"}"></span>
+            ${num ? `<span class="task-number">${num}</span>` : ""}
             ${esc(task.title)}
           </div>
           <div class="task-card-meta">
@@ -649,9 +659,11 @@
                 const dotAttr = tc
                   ? `class="priority-dot" style="background:${esc(tc)}"`
                   : `class="priority-dot priority-${t.priority || "medium"}"`;
+                const tNum = taskNumber(t.id);
                 return `
             <div class="timeline-item" data-id="${esc(t.id)}">
               <span ${dotAttr}></span>
+              ${tNum ? `<span class="task-number">${tNum}</span>` : ""}
               <span class="timeline-item-title">${esc(t.title)}</span>
               <span class="timeline-item-project">${esc(t.project || "")}</span>
             </div>`;
@@ -726,9 +738,11 @@
     const pColor = getProjectColor(task.project);
     const borderStyle = pColor ? `style="border-left:3px solid ${esc(pColor)}"` : "";
 
+    const num = taskNumber(task.id);
+
     return `
       <div class="archive-item" data-id="${esc(task.id)}" ${borderStyle}>
-        <div class="archive-item-title">${esc(task.title)}</div>
+        <div class="archive-item-title">${num ? `<span class="task-number">${num}</span>` : ""}${esc(task.title)}</div>
         <div class="archive-item-meta">
           ${task.project ? `<span class="archive-item-project">${esc(task.project)}</span>` : ""}
           ${doneDate ? `<span class="archive-item-date">${formatDate(doneDate)}</span>` : ""}
@@ -812,6 +826,8 @@
     els.modalPriority.textContent = task.priority || "medium";
 
     els.modalTitle.textContent = task.title || "";
+    const num = taskNumber(task.id);
+    els.modalTaskNumber.textContent = num || "";
     els.modalProject.textContent = task.project ? `Project: ${task.project}` : "";
     els.modalDue.textContent = task.due ? `Due: ${formatDate(task.due)}` : "";
     els.modalCreated.textContent = task.created ? `Created: ${formatDate(task.created)}` : "";

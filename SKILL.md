@@ -32,13 +32,20 @@ exists in the workspace path), walk the user through setup:
 
 ```python
 import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath("__file__")), "scripts"))
-# ── OR, if the skill is installed at a known path: ──
-# sys.path.insert(0, "<SKILL_DIR>/scripts")
+
+# Locate the skill root automatically (env var, openclaw dir, pnpm, or cwd)
+from scripts.config_manager import get_skill_root
+skill_root = str(get_skill_root())
+if skill_root not in sys.path:
+    sys.path.insert(0, skill_root)
 
 from scripts.file_manager import init_workspace
 init_workspace("<WORKSPACE_PATH>")
 ```
+
+> **Tip:** If auto-detection fails, set the `NLP_SKILL_PATH` environment
+> variable to the directory containing `SKILL.md`, `scripts/`, and
+> `templates/`.
 
 3. Confirm success:
    > "Your planner workspace is ready at `<path>`. Just tell me about anything
@@ -921,8 +928,8 @@ After=network.target
 [Service]
 Type=simple
 User=<USERNAME>
-WorkingDirectory=<SKILL_INSTALL_DIR>
-ExecStart=/usr/bin/python3 -m scripts dashboard --network <WORKSPACE_PATH>
+Environment=NLP_SKILL_PATH=<SKILL_INSTALL_DIR>
+ExecStart=/usr/bin/python3 <SKILL_INSTALL_DIR>/dashboard-daemon.py --network <WORKSPACE_PATH>
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -937,7 +944,7 @@ Replace the placeholders:
 | Placeholder | Example | How to find it |
 |---|---|---|
 | `<USERNAME>` | `sirius` | The OS user that owns the workspace files |
-| `<SKILL_INSTALL_DIR>` | `/home/sirius/.openclaw/skills/natural-language-planner` | The directory containing `scripts/` and `templates/` |
+| `<SKILL_INSTALL_DIR>` | `/home/sirius/.openclaw/skills/natural-language-planner` | The directory containing `scripts/` and `templates/`.  If auto-detection works, you can omit the `Environment=` line entirely — `dashboard-daemon.py` resolves the skill root on its own. |
 | `<WORKSPACE_PATH>` | `/mnt/ClawFiles/nlplanner` | The `workspace_path` value from `.nlplanner/config.json` |
 
 Omit `--network` if the dashboard should only be accessible on

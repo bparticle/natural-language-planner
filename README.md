@@ -41,6 +41,12 @@ You can also start it manually:
 
 ```bash
 python -m scripts dashboard ~/nlplanner
+
+# Or use the standalone launcher (works from any directory):
+python dashboard-daemon.py ~/nlplanner
+
+# Or the shell script equivalent:
+./start-dashboard.sh ~/nlplanner
 ```
 
 ## Workspace Structure
@@ -131,8 +137,7 @@ After=network.target
 [Service]
 Type=simple
 User=YOUR_USERNAME
-WorkingDirectory=/path/to/natural-language-planner
-ExecStart=/usr/bin/python3 -m scripts dashboard --network /path/to/workspace
+ExecStart=/usr/bin/python3 /path/to/natural-language-planner/dashboard-daemon.py --network /path/to/workspace
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -142,6 +147,11 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 ```
+
+`dashboard-daemon.py` automatically locates the skill's `scripts/` and
+`templates/` directories regardless of how the skill was installed (symlink,
+pnpm global, local checkout). If auto-detection doesn't work for your setup,
+add an `Environment=NLP_SKILL_PATH=/path/to/skill` line under `[Service]`.
 
 2. Enable and start:
 
@@ -182,6 +192,18 @@ The export inlines all CSS, JS, and data into a single `index.html` that
 works without a server. Note that exports are snapshots — re-export after
 changes for an updated version.
 
+## Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `NLP_SKILL_PATH` | *(auto-detected)* | Override the skill root directory. Set this if the skill can't be found automatically — point it at the folder containing `SKILL.md`, `scripts/`, and `templates/`. |
+
+The skill searches for its own installation in this order:
+1. `NLP_SKILL_PATH` environment variable
+2. `~/.openclaw/skills/natural-language-planner`
+3. pnpm global `node_modules` (for OpenClaw bundled installs)
+4. Relative to the running script
+
 ## Requirements
 
 - **Python 3.9+**
@@ -194,6 +216,8 @@ changes for an updated version.
 ```
 natural-language-planner/
 ├── SKILL.md              # AI skill instructions
+├── dashboard-daemon.py   # Standalone launcher (smart path resolution)
+├── start-dashboard.sh    # Shell script launcher
 ├── scripts/
 │   ├── __init__.py       # Package init
 │   ├── __main__.py       # CLI entry point

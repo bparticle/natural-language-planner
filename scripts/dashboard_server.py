@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse, parse_qs, unquote
 
-from .config_manager import load_config, set_setting, get_setting
+from .config_manager import load_config, set_setting, get_setting, get_skill_root
 from .file_manager import list_projects, list_tasks, get_project, get_task, get_today_tasks, set_today_tasks
 from .index_manager import rebuild_index, get_stats, search_tasks, get_tasks_due_soon, get_overdue_tasks
 
@@ -268,7 +268,8 @@ def _resolve_dashboard_dir() -> str:
     Find the dashboard static files directory.
 
     Looks in the workspace .nlplanner/dashboard first, then falls back to
-    the templates/dashboard shipped with the skill.
+    the templates/dashboard shipped with the skill (located via
+    :func:`get_skill_root`).
     """
     config = load_config()
     ws = config.get("workspace_path", "")
@@ -278,14 +279,18 @@ def _resolve_dashboard_dir() -> str:
         if (ws_dashboard / "index.html").exists():
             return str(ws_dashboard)
 
-    # Fallback: templates directory relative to this script
-    templates = Path(__file__).parent.parent / "templates" / "dashboard"
-    if (templates / "index.html").exists():
-        return str(templates)
+    try:
+        skill_root = get_skill_root()
+        templates = skill_root / "templates" / "dashboard"
+        if (templates / "index.html").exists():
+            return str(templates)
+    except FileNotFoundError:
+        pass
 
     raise FileNotFoundError(
         "Dashboard static files not found. Ensure the templates/dashboard/ "
-        "directory exists or run init_workspace() first."
+        "directory exists, run init_workspace() first, or set the "
+        "NLP_SKILL_PATH environment variable."
     )
 
 

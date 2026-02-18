@@ -593,6 +593,21 @@ body.dark .theme-toggle .icon-moon { display: none; }
   color: var(--text-secondary);
 }
 
+/* ── Task number badge ─────────────────────────────────────────── */
+.task-number {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.modal-meta .task-number {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
 /* ── Kanban board ──────────────────────────────────────────────── */
 .kanban {
   display: grid;
