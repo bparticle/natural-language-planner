@@ -587,6 +587,15 @@ def update_task(task_id: str, updates: dict[str, Any]) -> bool:
     # Keep aliased / legacy fields in sync (e.g. project ↔ project_id)
     _sync_field_aliases(updates, meta)
 
+    # Track when a task is marked done
+    if updates.get("status") == "done" and meta.get("status") != "done":
+        updates.setdefault("done_date", today_str())
+    # Clear done_date if re-opened
+    if "status" in updates and updates["status"] not in ("done", "archived"):
+        updates.pop("done_date", None)
+        if "done_date" in meta:
+            del meta["done_date"]
+
     meta.update(updates)
 
     # Auto-sync progress from subtasks when they exist
@@ -667,6 +676,11 @@ def list_tasks(
                 meta["subtask_count"] = len(subtasks)
                 meta["subtask_done"] = sum(1 for s in subtasks if s["done"])
 
+            # Flag tasks that have agent tips
+            meta["has_agent_tips"] = bool(
+                re.search(r"## Agent Tips\s*\n\s*-\s+\S", body)
+            )
+
             if _matches_filter(meta, filter_by):
                 tasks.append(meta)
 
@@ -699,6 +713,9 @@ def archive_task(task_id: str) -> bool:
         return False
     meta, body = parse_frontmatter(raw)
     meta["status"] = "archived"
+    if "done_date" not in meta:
+        meta["done_date"] = today_str()
+    meta.setdefault("archived_at", today_str())
 
     # Determine archive location
     project_id = meta.get("project", "inbox")

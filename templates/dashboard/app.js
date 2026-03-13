@@ -24,6 +24,10 @@
   let lastDataFingerprint = "";  // Detect actual data changes to avoid needless re-renders
   let lastVisibleTime = Date.now(); // Track when the tab was last visible
   let todayTaskIds = [];       // Task IDs pinned to today's focus
+  let activeTagFilter = "";    // Currently active tag filter (empty = no filter)
+  let activeProjectFilter = ""; // Currently active project filter
+  let activePriorityFilter = ""; // Currently active priority filter
+  let refreshInterval = null;  // Auto-refresh timer
 
   // Maps: project-id → hex colour, project-id → [tags]
   let projectColorMap = {};
@@ -137,11 +141,12 @@
     // Visual feedback — spin the refresh icon while loading
     els.btnRefresh.classList.add("spinning");
 
-    const [s, p, t, a] = await Promise.all([
+    const [s, p, t, a, attn] = await Promise.all([
       api("/api/stats"),
       api("/api/projects"),
       api("/api/tasks"),
       api("/api/tasks?include_archived=true"),
+      api("/api/needs-attention"),
     ]);
 
     // Fingerprint the response data — skip re-render if nothing changed
@@ -153,8 +158,8 @@
       if (s) stats = s;
       if (p) allProjects = p;
       if (t) allTasks = t;
-      // Archived tasks = everything from the include_archived call that has status "archived"
       if (a) archivedTasks = a.filter((task) => task.status === "archived");
+      attentionTasks = attn || [];
       buildProjectMaps();
 
       // Load today tasks from API/localStorage (auto-clears on date change)
@@ -204,14 +209,100 @@
 
   /**
    * Render a tag span, optionally coloured to its owning project.
+   * Tags are clickable — clicking filters the current view by that tag.
    */
   function tagHTML(tagName, projectId) {
-    // Try project-specific colour first, then fall back to tag lookup
     const color = (projectId && getProjectColor(projectId)) || getTagColor(tagName);
+    const active = activeTagFilter === tagName ? " tag-active" : "";
     if (color) {
-      return `<span class="tag" style="color:${esc(color)};background:${esc(color)}18">${esc(tagName)}</span>`;
+      return `<span class="tag${active}" data-tag="${esc(tagName)}" style="color:${esc(color)};background:${esc(color)}18;cursor:pointer">${esc(tagName)}</span>`;
     }
-    return `<span class="tag">${esc(tagName)}</span>`;
+    return `<span class="tag${active}" data-tag="${esc(tagName)}" style="cursor:pointer">${esc(tagName)}</span>`;
+  }
+
+  function setTagFilter(tag) {
+    activeTagFilter = activeTagFilter === tag ? "" : tag;
+    renderFilterChip();
+    render();
+  }
+
+  function renderFilterChip() {
+    const container = $("#filter-active-chips");
+    if (!container) return;
+
+    const chips = [];
+    if (activeTagFilter) {
+      chips.push({ label: `Tag: ${activeTagFilter}`, clear: () => { activeTagFilter = ""; } });
+    }
+    if (activeProjectFilter) {
+      chips.push({ label: `Project: ${activeProjectFilter}`, clear: () => { activeProjectFilter = ""; $("#filter-project").value = ""; } });
+    }
+    if (activePriorityFilter) {
+      chips.push({ label: `Priority: ${activePriorityFilter}`, clear: () => { activePriorityFilter = ""; $("#filter-priority").value = ""; } });
+    }
+
+    if (!chips.length) {
+      container.innerHTML = "";
+      return;
+    }
+
+    container.innerHTML = chips
+      .map((c, i) => `<span class="filter-chip"><span>${esc(c.label)}</span><button class="filter-chip-clear" data-idx="${i}">&times;</button></span>`)
+      .join("") +
+      (chips.length > 1 ? '<button class="filter-chip-clear-all">Clear all</button>' : "");
+
+    container.querySelectorAll(".filter-chip-clear").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        chips[parseInt(btn.dataset.idx)].clear();
+        renderFilterChip();
+        render();
+      });
+    });
+    const clearAll = container.querySelector(".filter-chip-clear-all");
+    if (clearAll) clearAll.addEventListener("click", clearAllFilters);
+  }
+
+  function applyFilters(tasks) {
+    let result = tasks;
+    if (activeTagFilter) {
+      result = result.filter((t) => (t.tags || []).includes(activeTagFilter));
+    }
+    if (activeProjectFilter) {
+      result = result.filter((t) => t.project === activeProjectFilter);
+    }
+    if (activePriorityFilter) {
+      result = result.filter((t) => t.priority === activePriorityFilter);
+    }
+    return result;
+  }
+
+  function hasActiveFilters() {
+    return !!(activeTagFilter || activeProjectFilter || activePriorityFilter);
+  }
+
+  function clearAllFilters() {
+    activeTagFilter = "";
+    activeProjectFilter = "";
+    activePriorityFilter = "";
+    const pSel = $("#filter-project");
+    const prSel = $("#filter-priority");
+    if (pSel) pSel.value = "";
+    if (prSel) prSel.value = "";
+    renderFilterChip();
+    render();
+  }
+
+  function populateFilterDropdowns() {
+    const pSel = $("#filter-project");
+    if (!pSel) return;
+    const current = pSel.value;
+    const opts = ['<option value="">All Projects</option>'];
+    for (const p of allProjects) {
+      const pid = p.id || p.title;
+      opts.push(`<option value="${esc(pid)}"${pid === current ? " selected" : ""}>${esc(p.title || pid)}</option>`);
+    }
+    pSel.innerHTML = opts.join("");
   }
 
   async function loadTaskDetail(taskId) {
@@ -224,13 +315,56 @@
   // ── Rendering ───────────────────────────────────────────────────
 
   function render() {
+    populateFilterDropdowns();
     renderStats();
     renderToday();
+    renderNeedsAttention();
     renderWeekFocus();
     renderBoard();
     renderProjects();
     renderTimeline();
     renderArchive();
+    attachTagClicks();
+  }
+
+  let attentionTasks = [];
+
+  async function loadNeedsAttention() {
+    const data = await api("/api/needs-attention");
+    attentionTasks = data || [];
+  }
+
+  function renderNeedsAttention() {
+    const banner = $("#attention-banner");
+    const list = $("#attention-list");
+    const count = $("#attention-count");
+    if (!banner || !list) return;
+
+    if (!attentionTasks.length) {
+      banner.style.display = "none";
+      return;
+    }
+
+    banner.style.display = "block";
+    count.textContent = `${attentionTasks.length}`;
+    list.innerHTML = attentionTasks
+      .slice(0, 8)
+      .map((t) => {
+        const reason = t._attention_reason || "";
+        const pColor = getProjectColor(t.project);
+        const dotStyle = pColor ? `style="background:${esc(pColor)}"` : "";
+        return `
+          <div class="attention-item" data-id="${esc(t.id)}">
+            <span class="priority-dot priority-${t.priority || "medium"}" ${dotStyle}></span>
+            <span class="attention-item-title">${esc(t.title)}</span>
+            <span class="attention-item-reason">${esc(reason)}</span>
+          </div>`;
+      })
+      .join("");
+
+    list.querySelectorAll(".attention-item").forEach((item) => {
+      item.addEventListener("click", () => openModal(item.dataset.id));
+    });
   }
 
   function renderStats() {
@@ -410,7 +544,7 @@
     //  - It's in-progress, OR
     //  - It has a due date this week (and not done/archived), OR
     //  - It's high priority + todo
-    const weekTasks = allTasks.filter((t) => {
+    const weekTasks = applyFilters(allTasks).filter((t) => {
       if (t.status === "done" || t.status === "archived") return false;
       if (t.status === "in-progress") return true;
       if (t.due) {
@@ -487,6 +621,7 @@
               ${esc(task.title)}
             </div>
             <div class="focus-card-badges">
+              ${task.has_agent_tips ? '<span class="tips-badge" title="Has agent tips">&#x1F4A1;</span>' : ""}
               <span class="badge badge-sm badge-${task.status || "todo"}">${esc(task.status || "todo")}</span>
             </div>
           </div>
@@ -506,7 +641,7 @@
 
   function renderBoard() {
     const buckets = { todo: [], "in-progress": [], done: [] };
-    for (const task of allTasks) {
+    for (const task of applyFilters(allTasks)) {
       const s = task.status || "todo";
       if (buckets[s]) buckets[s].push(task);
     }
@@ -573,6 +708,7 @@
             <span class="task-card-project">${esc(task.project || "")}</span>
             ${dueLabel ? `<span class="task-card-due ${dueClass}">${dueLabel}</span>` : ""}
             ${tags}
+            ${task.has_agent_tips ? '<span class="tips-badge" title="Has agent tips">&#x1F4A1;</span>' : ""}
           </div>
           ${progressBarHTML(task)}
         </div>
@@ -582,6 +718,15 @@
   function attachCardClicks() {
     $$(".task-card").forEach((card) => {
       card.addEventListener("click", () => openModal(card.dataset.id));
+    });
+  }
+
+  function attachTagClicks() {
+    $$("[data-tag]").forEach((el) => {
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setTagFilter(el.dataset.tag);
+      });
     });
   }
 
@@ -630,7 +775,7 @@
   // ── Timeline ────────────────────────────────────────────────────
 
   function renderTimeline() {
-    const withDue = allTasks
+    const withDue = applyFilters(allTasks)
       .filter((t) => t.due && t.status !== "done" && t.status !== "archived")
       .sort((a, b) => (a.due > b.due ? 1 : -1));
 
@@ -682,18 +827,17 @@
   // ── Archive ─────────────────────────────────────────────────────
 
   function renderArchive() {
-    if (!archivedTasks.length) {
+    const filtered = applyFilters(archivedTasks);
+    if (!filtered.length) {
       els.archiveCount.textContent = "";
       els.archiveList.innerHTML =
         '<p class="archive-empty">No archived tasks yet. Completed tasks will appear here once archived.</p>';
       return;
     }
 
-    els.archiveCount.textContent = `${archivedTasks.length} task${archivedTasks.length === 1 ? "" : "s"}`;
+    els.archiveCount.textContent = `${filtered.length} task${filtered.length === 1 ? "" : "s"}`;
 
-    // Sort by done/updated date descending (most recently archived first),
-    // fall back to created date
-    const sorted = [...archivedTasks].sort((a, b) => {
+    const sorted = [...filtered].sort((a, b) => {
       const dateA = a.done_date || a.updated || a.created || "";
       const dateB = b.done_date || b.updated || b.created || "";
       return dateB > dateA ? 1 : dateB < dateA ? -1 : 0;
@@ -879,10 +1023,19 @@
     // Subtasks checklist in modal
     renderSubtasks(subtasks);
 
-    // Dependencies
+    // Dependencies — render as clickable links to open the dependent task
     const deps = task.dependencies || [];
     if (deps.length) {
-      els.modalDeps.innerHTML = `<strong>Dependencies:</strong> ${deps.map(esc).join(", ")}`;
+      const depLinks = deps
+        .map((d) => `<a class="dep-link" data-id="${esc(d)}">${esc(d)}</a>`)
+        .join(", ");
+      els.modalDeps.innerHTML = `<strong>Dependencies:</strong> ${depLinks}`;
+      els.modalDeps.querySelectorAll(".dep-link").forEach((link) => {
+        link.addEventListener("click", (e) => {
+          e.preventDefault();
+          openModal(link.dataset.id);
+        });
+      });
     } else {
       els.modalDeps.innerHTML = "";
     }
@@ -1191,6 +1344,24 @@
       }
     });
 
+    // Filters
+    const filterProject = $("#filter-project");
+    const filterPriority = $("#filter-priority");
+    if (filterProject) {
+      filterProject.addEventListener("change", () => {
+        activeProjectFilter = filterProject.value;
+        renderFilterChip();
+        render();
+      });
+    }
+    if (filterPriority) {
+      filterPriority.addEventListener("change", () => {
+        activePriorityFilter = filterPriority.value;
+        renderFilterChip();
+        render();
+      });
+    }
+
     // Refresh
     els.btnRefresh.addEventListener("click", loadAll);
 
@@ -1225,6 +1396,11 @@
         loadAll();
       }
     });
+
+    // Auto-refresh every 30 seconds (skip when tab is hidden)
+    refreshInterval = setInterval(() => {
+      if (!document.hidden) loadAll();
+    }, 30000);
 
     // Initial load
     loadAll();

@@ -23,7 +23,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 
 from .config_manager import load_config, set_setting, get_setting, get_skill_root
 from .file_manager import list_projects, list_tasks, get_project, get_task, get_today_tasks, set_today_tasks
-from .index_manager import rebuild_index, get_stats, search_tasks, get_tasks_due_soon, get_overdue_tasks
+from .index_manager import rebuild_index, get_stats, search_tasks, get_tasks_due_soon, get_overdue_tasks, get_tasks_needing_checkin
 
 logger = logging.getLogger("nlplanner.dashboard")
 
@@ -77,6 +77,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             "/api/due-soon": self._api_due_soon,
             "/api/overdue": self._api_overdue,
             "/api/today": self._api_today_get,
+            "/api/needs-attention": self._api_needs_attention,
             "/api/health": self._api_health,
         }
 
@@ -158,6 +159,23 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def _api_overdue(self, params: dict) -> None:
         rebuild_index()
         self._json_response(get_overdue_tasks())
+
+    def _api_needs_attention(self, params: dict) -> None:
+        """Combine overdue tasks and stale check-in tasks into one list."""
+        rebuild_index()
+        overdue = get_overdue_tasks()
+        stale = get_tasks_needing_checkin()
+        seen = set()
+        items = []
+        for t in overdue:
+            t["_attention_reason"] = f"Overdue by {t.get('_days_overdue', '?')} days"
+            items.append(t)
+            seen.add(t.get("id"))
+        for t in stale:
+            if t.get("id") not in seen:
+                t["_attention_reason"] = "No check-in recently"
+                items.append(t)
+        self._json_response(items)
 
     def _api_single_project(self, project_id: str) -> None:
         project = get_project(project_id)

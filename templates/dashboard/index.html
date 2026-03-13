@@ -94,10 +94,34 @@
       <button class="tab" data-view="archive">Archive</button>
     </nav>
 
+    <!-- ── Filter bar ───────────────────────────────────────── -->
+    <div class="filter-bar" id="filter-bar">
+      <div class="filter-bar-filters">
+        <select class="filter-select" id="filter-project">
+          <option value="">All Projects</option>
+        </select>
+        <select class="filter-select" id="filter-priority">
+          <option value="">All Priorities</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+      <div class="filter-bar-active" id="filter-active-chips"></div>
+    </div>
+
     <!-- ── Main content ────────────────────────────────────── -->
     <main class="main-content">
       <!-- This Week focus view (default) -->
       <div class="view view-focus active" id="view-focus">
+        <div class="attention-banner" id="attention-banner" style="display:none">
+          <div class="attention-header">
+            <span class="attention-icon">&#9888;</span>
+            <span class="attention-title">Needs Attention</span>
+            <span class="attention-count" id="attention-count"></span>
+          </div>
+          <div class="attention-list" id="attention-list"></div>
+        </div>
         <section class="week-section" id="week-section">
           <div class="week-header">
             <h2>This Week</h2>

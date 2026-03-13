@@ -608,6 +608,173 @@ body.dark .theme-toggle .icon-moon { display: none; }
   color: var(--text-secondary);
 }
 
+/* ── Tag filtering ─────────────────────────────────────────────── */
+.tag {
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+.tag:hover {
+  opacity: 0.8;
+}
+.tag-active {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+
+/* ── Filter bar ────────────────────────────────────────────────── */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 8px;
+}
+.filter-bar-filters {
+  display: flex;
+  gap: 8px;
+}
+.filter-select {
+  font-size: 0.8rem;
+  padding: 5px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-light);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--transition);
+}
+.filter-select:hover,
+.filter-select:focus {
+  border-color: var(--border);
+}
+
+.filter-bar-active {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-light);
+}
+.filter-chip-clear {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+.filter-chip-clear:hover {
+  color: var(--red);
+}
+.filter-chip-clear-all {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+.filter-chip-clear-all:hover {
+  color: var(--red);
+}
+
+/* ── Needs Attention banner ─────────────────────────────────────── */
+.attention-banner {
+  background: color-mix(in srgb, var(--amber) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--amber) 25%, var(--border-light));
+  border-radius: var(--radius-lg);
+  padding: 14px 18px;
+  margin-bottom: 16px;
+}
+.attention-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.attention-icon {
+  font-size: 1rem;
+  color: var(--amber);
+}
+.attention-title {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+.attention-count {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 15%, transparent);
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+.attention-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.attention-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.attention-item:hover {
+  background: var(--surface-hover);
+}
+.attention-item-title {
+  font-size: 0.82rem;
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attention-item-reason {
+  font-size: 0.72rem;
+  color: var(--amber);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Agent tips badge ──────────────────────────────────────────── */
+.tips-badge {
+  font-size: 0.75rem;
+  line-height: 1;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+/* ── Dependency links ──────────────────────────────────────────── */
+.dep-link {
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: none;
+  font-weight: 500;
+}
+.dep-link:hover {
+  text-decoration: underline;
+}
+
 /* ── Kanban board ──────────────────────────────────────────────── */
 .kanban {
   display: grid;
