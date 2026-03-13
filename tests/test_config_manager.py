@@ -20,6 +20,10 @@ from scripts.config_manager import (
     set_setting,
     get_checkin_frequency,
     set_checkin_frequency,
+    get_reminder_style,
+    set_reminder_style,
+    get_reminder_proactivity,
+    set_reminder_proactivity,
     get_preference,
     DEFAULT_CONFIG,
 )
@@ -103,6 +107,42 @@ class TestCheckinFrequency:
         save_config(config, str(workspace))
         assert set_checkin_frequency(0)  # Should clamp to 1
         assert get_checkin_frequency() == 1
+
+
+class TestReminderModes:
+    def test_default_reminder_style(self, workspace):
+        config = load_config(str(workspace))
+        save_config(config, str(workspace))
+        assert get_reminder_style() == "casual-checkin"
+
+    def test_set_valid_reminder_style(self, workspace):
+        config = load_config(str(workspace))
+        save_config(config, str(workspace))
+        assert set_reminder_style("productivity-bro")
+        assert get_reminder_style() == "productivity-bro"
+
+    def test_set_invalid_reminder_style_rejected(self, workspace):
+        config = load_config(str(workspace))
+        save_config(config, str(workspace))
+        assert not set_reminder_style("strict-mom-like")
+        assert get_reminder_style() == "casual-checkin"
+
+    def test_default_reminder_proactivity(self, workspace):
+        config = load_config(str(workspace))
+        save_config(config, str(workspace))
+        assert get_reminder_proactivity() == "proactive"
+
+    def test_set_valid_reminder_proactivity(self, workspace):
+        config = load_config(str(workspace))
+        save_config(config, str(workspace))
+        assert set_reminder_proactivity("on-request")
+        assert get_reminder_proactivity() == "on-request"
+
+    def test_set_invalid_reminder_proactivity_rejected(self, workspace):
+        config = load_config(str(workspace))
+        save_config(config, str(workspace))
+        assert not set_reminder_proactivity("always")
+        assert get_reminder_proactivity() == "proactive"
 
 
 class TestPreferences:

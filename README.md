@@ -78,6 +78,8 @@ Settings live in `.nlplanner/config.json`:
 | Setting | Default | Description |
 |---|---|---|
 | `checkin_frequency_hours` | 24 | How often to ask about stale tasks |
+| `reminder_style` | `"casual-checkin"` | Reminder tone preset: `productivity-bro`, `casual-checkin`, `strict-coach`, `completion-tracker` |
+| `reminder_proactivity` | `"proactive"` | Reminder behavior: automatic (`proactive`) or only when asked (`on-request`) |
 | `auto_archive_completed_days` | 30 | Days before done tasks auto-archive |
 | `default_priority` | `"medium"` | Default priority for new tasks |
 | `dashboard_port` | 8080 | Port for the local dashboard |

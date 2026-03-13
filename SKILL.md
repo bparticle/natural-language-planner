@@ -209,6 +209,37 @@ from scripts.utils import today_str
 update_task("task-001", {"last_checkin": today_str(), "status": "in-progress"})
 ```
 
+### Reminder style modes (new feature)
+
+Reminder tone is configurable. Use the user's preferred style consistently
+for check-ins, overdue alerts, and "what's on my plate?" summaries.
+
+Persist the style in config with `set_setting("reminder_style", "<style>")`.
+Supported values:
+
+| `reminder_style` | Personality | Example check-in |
+|---|---|---|
+| `productivity-bro` | Energetic, hype, outcome-driven | "Let's get after it: can we close out Deploy to staging today?" |
+| `casual-checkin` | Low-pressure, friendly nudge | "Quick check: how's Deploy to staging going?" |
+| `strict-coach` | Firm, direct, accountability-first | "Status update needed: Deploy to staging is overdue. What is the blocker and next step?" |
+| `completion-tracker` | Neutral, progress-logging only | "Update logged request: Deploy to staging — done, in-progress, or blocked?" |
+
+When a user asks for a "strict mom-like babysitting" tone, map to
+`strict-coach`.
+
+### Reminder proactivity mode
+
+Control whether reminders are initiated automatically or only when asked.
+Persist with `set_setting("reminder_proactivity", "<mode>")`.
+
+| `reminder_proactivity` | Behaviour |
+|---|---|
+| `proactive` | Run normal stale/overdue check-ins as described in this section |
+| `on-request` | Do not initiate reminders automatically; only provide reminders when the user asks |
+
+If proactivity is `on-request`, skip proactive check-ins entirely and keep
+tracking metadata silently in the background.
+
 ### Check-in etiquette
 
 - **Don't be annoying.** Limit to 1–2 check-ins per conversation.
@@ -1223,6 +1254,8 @@ Settings are stored in `.nlplanner/config.json`. The user can adjust:
 | Setting | Default | Description |
 |---|---|---|
 | `checkin_frequency_hours` | 24 | Hours between proactive check-ins |
+| `reminder_style` | `"casual-checkin"` | Reminder tone preset. Options: `productivity-bro`, `casual-checkin`, `strict-coach`, `completion-tracker` |
+| `reminder_proactivity` | `"proactive"` | Whether reminders are automatic (`proactive`) or only shown when asked (`on-request`) |
 | `auto_archive_completed_days` | 30 | Auto-archive tasks done for N days |
 | `default_priority` | `"medium"` | Priority for tasks without explicit priority |
 | `dashboard_port` | 8080 | Port for the local dashboard server |
@@ -1231,6 +1264,8 @@ Settings are stored in `.nlplanner/config.json`. The user can adjust:
 ```python
 from scripts.config_manager import set_setting, get_setting
 set_setting("checkin_frequency_hours", 48)
+set_setting("reminder_style", "strict-coach")
+set_setting("reminder_proactivity", "on-request")
 current = get_setting("dashboard_port")  # 8080
 ```
 
@@ -1244,6 +1279,8 @@ Follow these guidelines when talking to the user about their tasks:
   > "Created project 'Website Redesign' with 3 tasks."
 - **Confirm major actions** but don't ask permission for obvious ones.
 - **Use natural language**, not technical jargon.
+- **Respect the configured reminder style and proactivity mode** (`reminder_style`,
+  `reminder_proactivity`) for all schedule nudges and check-ins.
 - **Ask for clarification** only when truly ambiguous (e.g., unclear which
   project a task belongs to).
 - **Be encouraging** but not patronising.

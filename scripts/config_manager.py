@@ -23,6 +23,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "workspace_path": "",
     "settings": {
         "checkin_frequency_hours": 24,
+        "reminder_style": "casual-checkin",
+        "reminder_proactivity": "proactive",
         "auto_archive_completed_days": 30,
         "default_priority": "medium",
         "dashboard_port": 8080,
@@ -220,6 +222,85 @@ def set_checkin_frequency(hours: int) -> bool:
     """
     hours = max(1, hours)
     return set_setting("checkin_frequency_hours", hours)
+
+
+def get_reminder_style() -> str:
+    """
+    Get the configured reminder style.
+
+    Returns:
+        One of:
+        - productivity-bro
+        - casual-checkin
+        - strict-coach
+        - completion-tracker
+    """
+    style = str(get_setting("reminder_style") or "casual-checkin").strip()
+    allowed = {
+        "productivity-bro",
+        "casual-checkin",
+        "strict-coach",
+        "completion-tracker",
+    }
+    return style if style in allowed else "casual-checkin"
+
+
+def set_reminder_style(style: str) -> bool:
+    """
+    Set the reminder style.
+
+    Args:
+        style: One of:
+            - productivity-bro
+            - casual-checkin
+            - strict-coach
+            - completion-tracker
+
+    Returns:
+        True if saved successfully.
+    """
+    style = str(style).strip()
+    allowed = {
+        "productivity-bro",
+        "casual-checkin",
+        "strict-coach",
+        "completion-tracker",
+    }
+    if style not in allowed:
+        logger.warning("Invalid reminder style '%s'; keeping existing value.", style)
+        return False
+    return set_setting("reminder_style", style)
+
+
+def get_reminder_proactivity() -> str:
+    """
+    Get reminder proactivity mode.
+
+    Returns:
+        "proactive" or "on-request".
+    """
+    mode = str(get_setting("reminder_proactivity") or "proactive").strip()
+    return mode if mode in {"proactive", "on-request"} else "proactive"
+
+
+def set_reminder_proactivity(mode: str) -> bool:
+    """
+    Set reminder proactivity mode.
+
+    Args:
+        mode: "proactive" or "on-request".
+
+    Returns:
+        True if saved successfully.
+    """
+    mode = str(mode).strip()
+    if mode not in {"proactive", "on-request"}:
+        logger.warning(
+            "Invalid reminder proactivity mode '%s'; keeping existing value.",
+            mode,
+        )
+        return False
+    return set_setting("reminder_proactivity", mode)
 
 
 def get_preference(key: str) -> Any:
