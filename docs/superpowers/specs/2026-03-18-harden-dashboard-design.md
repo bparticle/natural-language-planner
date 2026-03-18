@@ -261,23 +261,25 @@ Replace `max-height` animation on the modal progress section with `grid-template
 
 Verify each selector against the actual HTML before applying. Confirmed class names from the codebase:
 
-**Focus card titles** — class is `.focus-card-title` (clamp to 2 lines):
+**Focus card titles** — class is `.focus-card-title` (clamp to 2 lines, with flex shrink guard):
 ```css
 .focus-card-title {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  min-width: 0; /* flex shrink guard — allows shrinking below content size */
 }
 ```
 
-**Kanban task card titles** — class is `.task-card-title` (clamp to 2 lines):
+**Kanban task card titles** — class is `.task-card-title` (clamp to 2 lines, with flex shrink guard):
 ```css
 .task-card-title {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  min-width: 0; /* flex shrink guard */
 }
 ```
 
@@ -299,10 +301,10 @@ Verify each selector against the actual HTML before applying. Confirmed class na
 }
 ```
 
-**Flex shrink guards** — `min-width: 0` on text-bearing flex children. Use confirmed class names only:
-- `.focus-card-top` children (the flex row containing title and badge)
-- `.task-card-title` directly (`.task-card-body` has no CSS rules and is a plain block element, so `min-width: 0` on it is a no-op; apply the guard directly to the title)
-- `.project-card-title` directly (`.project-card-header` does not exist in the codebase)
+**Flex shrink guards** — `min-width: 0` inlined into the relevant CSS blocks above:
+- `.focus-card-title` — included in the block above
+- `.task-card-title` — include `min-width: 0` in the clamp block below
+- `.project-card-title` — include `min-width: 0` in the ellipsis block below (`.project-card-header` does not exist in the codebase; `.task-card-body` has no CSS rules and is a plain block, so the guard belongs on the title directly)
 
 Note: `.today-item-title` already has `min-width: 0` in the existing CSS — no change needed there.
 
@@ -312,7 +314,7 @@ Note: `.today-item-title` already has `min-width: 0` in the existing CSS — no 
 
 ### Error banner (index.html)
 
-Add between line 86 (`</section>` closing `.top-bar`) and line 89 (`<nav class="view-tabs">`), hidden by default:
+Add after line 86 (`</section>` closing `.top-bar`), before `<nav class="view-tabs">`, hidden by default:
 
 ```html
 <div id="error-banner" role="alert" hidden>
@@ -403,6 +405,7 @@ els.btnRetry.addEventListener('click', () => {
 
 **Add to `els` cache:**
 ```js
+modal: $('#task-modal'),          // needed by trapFocus and openModal
 errorBanner: $('#error-banner'),
 errorMessage: $('#error-message'),
 btnRetry: $('#btn-retry'),
