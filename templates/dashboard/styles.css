@@ -644,9 +644,13 @@ body.dark .theme-toggle .icon-moon { display: none; }
   outline: none;
   transition: border-color var(--transition);
 }
-.filter-select:hover,
-.filter-select:focus {
+.filter-select:hover {
   border-color: var(--border);
+}
+.filter-select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-light);
+  outline: none;
 }
 
 .filter-bar-active {
@@ -1970,5 +1974,15 @@ body.dark .theme-toggle .icon-moon { display: none; }
 
   .main-content {
     padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

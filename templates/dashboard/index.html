@@ -14,15 +14,15 @@
         <h1 class="logo">NL Planner</h1>
       </div>
       <div class="header-center">
-        <div class="search-box">
+        <div class="search-box" role="search">
           <svg class="icon icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-          <input type="text" id="search-input" placeholder="Search tasks..." autocomplete="off" />
+          <input type="text" id="search-input" placeholder="Search tasks..." autocomplete="off" aria-label="Search tasks" />
         </div>
       </div>
       <div class="header-right">
-        <button class="btn btn-ghost theme-toggle" id="btn-theme" title="Toggle dark mode">
+        <button class="btn btn-ghost theme-toggle" id="btn-theme" title="Toggle dark mode" aria-label="Toggle dark mode" aria-pressed="false">
           <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
           </svg>
@@ -34,7 +34,7 @@
             <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
           </svg>
         </button>
-        <button class="btn btn-ghost" id="btn-refresh" title="Refresh data">
+        <button class="btn btn-ghost" id="btn-refresh" title="Refresh data" aria-label="Refresh data">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
@@ -86,12 +86,12 @@
     </section>
 
     <!-- ── View tabs ───────────────────────────────────────── -->
-    <nav class="view-tabs">
-      <button class="tab active" data-view="focus">This Week</button>
-      <button class="tab" data-view="board">Board</button>
-      <button class="tab" data-view="projects">Projects</button>
-      <button class="tab" data-view="timeline">Timeline</button>
-      <button class="tab" data-view="archive">Archive</button>
+    <nav class="view-tabs" role="tablist" aria-label="Dashboard views">
+      <button class="tab active" role="tab" data-view="focus" id="tab-focus" aria-selected="true" aria-controls="view-focus">This Week</button>
+      <button class="tab" role="tab" data-view="board" id="tab-board" aria-selected="false" aria-controls="view-board">Board</button>
+      <button class="tab" role="tab" data-view="projects" id="tab-projects" aria-selected="false" aria-controls="view-projects">Projects</button>
+      <button class="tab" role="tab" data-view="timeline" id="tab-timeline" aria-selected="false" aria-controls="view-timeline">Timeline</button>
+      <button class="tab" role="tab" data-view="archive" id="tab-archive" aria-selected="false" aria-controls="view-archive">Archive</button>
     </nav>
 
     <!-- ── Filter bar ───────────────────────────────────────── -->

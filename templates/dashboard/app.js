@@ -106,7 +106,32 @@
     // Lightbox
     lightboxOverlay: $("#lightbox-overlay"),
     lightboxImg: $("#lightbox-img"),
+    // Modal inner container (for focus trap)
+    modal: $("#task-modal"),
   };
+
+  // ── Focus management ────────────────────────────────────────────
+
+  let lastFocusedEl = null;
+  let removeTrap = null;
+
+  function trapFocus(el) {
+    const focusable = el.querySelectorAll(
+      'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    function handler(e) {
+      if (e.key !== "Tab") return;
+      if (e.shiftKey) {
+        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+      } else {
+        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }
+    el.addEventListener("keydown", handler);
+    return () => el.removeEventListener("keydown", handler);
+  }
 
   // ── Theme ───────────────────────────────────────────────────────
 
@@ -950,8 +975,11 @@
     const listTask = allTasks.find((t) => t.id === taskId)
       || archivedTasks.find((t) => t.id === taskId);
     if (!listTask) return;
+    lastFocusedEl = document.activeElement;
     populateModal(listTask, null);
     els.modalOverlay.classList.add("open");
+    els.modalClose.focus();
+    removeTrap = trapFocus(els.modal);
 
     // Then fetch full detail (body, context, attachments)
     const detail = await loadTaskDetail(taskId);
@@ -1163,7 +1191,9 @@
   }
 
   function closeModal() {
+    removeTrap?.(); removeTrap = null;
     els.modalOverlay.classList.remove("open");
+    lastFocusedEl?.focus(); lastFocusedEl = null;
   }
 
   // ── Subtasks (modal) ───────────────────────────────────────────
@@ -1254,7 +1284,9 @@
   function switchView(name) {
     currentView = name;
     els.tabs.forEach((tab) => {
-      tab.classList.toggle("active", tab.dataset.view === name);
+      const active = tab.dataset.view === name;
+      tab.classList.toggle("active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
     });
     els.views.forEach((v) => {
       const match = v.id === `view-${name}`;
