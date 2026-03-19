@@ -21,7 +21,13 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse, parse_qs, unquote
 
-from .config_manager import load_config, set_setting, get_setting, get_skill_root
+from .config_manager import (
+    clear_skill_root_cache,
+    get_setting,
+    get_skill_root,
+    load_config,
+    set_setting,
+)
 from .file_manager import list_projects, list_tasks, get_project, get_task, get_today_tasks, set_today_tasks
 from .index_manager import rebuild_index, get_stats, search_tasks, get_tasks_due_soon, get_overdue_tasks, get_tasks_needing_checkin
 
@@ -401,6 +407,9 @@ def start_dashboard(
     """
     global _server, _thread, _started_at
 
+    # Always re-detect skill root on startup to avoid stale module-level cache.
+    clear_skill_root_cache()
+
     if _server is not None:
         logger.info("Dashboard is already running.")
         return get_dashboard_url()
@@ -557,6 +566,8 @@ def restart_dashboard(
         >>> print(url)
         http://localhost:8080
     """
+    # Ensure restart does not reuse a stale cached skill root.
+    clear_skill_root_cache()
     port = get_dashboard_port() or None
     stop_dashboard()
     return ensure_dashboard(port=port, allow_network=allow_network, strict_port=strict_port)

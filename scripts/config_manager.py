@@ -329,6 +329,12 @@ def _is_skill_root(path: Path) -> bool:
     return all((path / marker).exists() for marker in _SKILL_MARKER_FILES)
 
 
+def clear_skill_root_cache() -> None:
+    """Clear cached skill root so the next lookup re-detects locations."""
+    global _skill_root_cache
+    _skill_root_cache = None
+
+
 def _pnpm_global_root() -> Optional[Path]:
     """Ask pnpm for the global modules root, if available."""
     pnpm = shutil.which("pnpm")
