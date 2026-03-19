@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NL Planner — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -58,27 +61,28 @@
 
       <!-- Stats bar -->
       <div class="stats-bar" id="stats-bar" aria-label="Task statistics">
-        <div class="stat-card">
+        <div class="stat-card stat-hero">
           <span class="stat-value" id="stat-total">—</span>
           <span class="stat-label">Total Tasks</span>
+          <span class="stat-meta">Across all projects</span>
         </div>
-        <div class="stat-card stat-todo">
+        <div class="stat-card stat-compact stat-todo">
           <span class="stat-value" id="stat-todo">—</span>
           <span class="stat-label">To Do</span>
         </div>
-        <div class="stat-card stat-progress">
+        <div class="stat-card stat-compact stat-progress">
           <span class="stat-value" id="stat-progress">—</span>
           <span class="stat-label">In Progress</span>
         </div>
-        <div class="stat-card stat-done">
+        <div class="stat-card stat-compact stat-done">
           <span class="stat-value" id="stat-done">—</span>
           <span class="stat-label">Done</span>
         </div>
-        <div class="stat-card stat-overdue">
+        <div class="stat-card stat-compact stat-overdue">
           <span class="stat-value" id="stat-overdue">—</span>
           <span class="stat-label">Overdue</span>
         </div>
-        <div class="stat-card">
+        <div class="stat-card stat-compact stat-projects">
           <span class="stat-value" id="stat-projects">—</span>
           <span class="stat-label">Projects</span>
         </div>
@@ -124,7 +128,7 @@
     <!-- ── Main content ────────────────────────────────────── -->
     <main class="main-content">
       <!-- This Week focus view (default) -->
-      <div class="view view-focus active" id="view-focus">
+      <div class="view view-focus active" id="view-focus" role="tabpanel" aria-labelledby="tab-focus" tabindex="0">
         <div class="attention-banner" id="attention-banner" role="status" aria-live="polite" style="display:none">
           <div class="attention-header">
             <span class="attention-icon">&#9888;</span>
@@ -143,7 +147,7 @@
       </div>
 
       <!-- Board view (Kanban) -->
-      <div class="view view-board" id="view-board">
+      <div class="view view-board" id="view-board" role="tabpanel" aria-labelledby="tab-board" tabindex="0">
         <div class="kanban">
           <div class="kanban-column" data-status="todo">
             <div class="column-header">
@@ -173,23 +177,24 @@
       </div>
 
       <!-- Projects view -->
-      <div class="view view-projects" id="view-projects">
+      <div class="view view-projects" id="view-projects" role="tabpanel" aria-labelledby="tab-projects" tabindex="0">
         <div class="projects-grid" id="projects-grid"></div>
       </div>
 
       <!-- Timeline view -->
-      <div class="view view-timeline" id="view-timeline">
+      <div class="view view-timeline" id="view-timeline" role="tabpanel" aria-labelledby="tab-timeline" tabindex="0">
         <div class="timeline" id="timeline"></div>
       </div>
 
       <!-- Archive view -->
-      <div class="view view-archive" id="view-archive">
+      <div class="view view-archive" id="view-archive" role="tabpanel" aria-labelledby="tab-archive" tabindex="0">
         <div class="archive-section">
           <div class="archive-header">
             <h2>Archive</h2>
             <span class="archive-count" id="archive-count"></span>
           </div>
           <div class="archive-list" id="archive-list"></div>
+          <div class="archive-controls" id="archive-controls"></div>
         </div>
       </div>
 
@@ -217,13 +222,15 @@
           <span id="modal-created"></span>
         </div>
         <div class="modal-tags" id="modal-tags"></div>
-        <div class="modal-progress" id="modal-progress" style="display:none">
-          <div class="modal-progress-header">
-            <span class="modal-progress-label">Progress</span>
-            <span class="modal-progress-pct" id="modal-progress-pct"></span>
-          </div>
-          <div class="progress-bar progress-bar-modal">
-            <div class="progress-bar-fill" id="modal-progress-fill"></div>
+        <div class="modal-progress-wrapper" id="modal-progress">
+          <div class="modal-progress-inner">
+            <div class="modal-progress-header">
+              <span class="modal-progress-label">Progress</span>
+              <span class="modal-progress-pct" id="modal-progress-pct"></span>
+            </div>
+            <div class="progress-bar progress-bar-modal">
+              <div class="progress-bar-fill" id="modal-progress-fill"></div>
+            </div>
           </div>
         </div>
         <div class="modal-body" id="modal-body"></div>
@@ -254,8 +261,12 @@
     </div>
 
     <!-- ── Image lightbox ──────────────────────────────────── -->
-    <div class="lightbox-overlay" id="lightbox-overlay">
-      <img id="lightbox-img" src="" alt="Attachment preview" />
+    <div class="lightbox-overlay" id="lightbox-overlay" role="dialog" aria-modal="true" aria-labelledby="lightbox-title">
+      <div class="lightbox-shell" id="lightbox-shell" tabindex="-1">
+        <h2 class="sr-only" id="lightbox-title">Attachment preview</h2>
+        <button class="lightbox-close" id="lightbox-close" aria-label="Close attachment preview">&times;</button>
+        <img id="lightbox-img" src="" alt="Attachment preview" />
+      </div>
     </div>
   </div>
 

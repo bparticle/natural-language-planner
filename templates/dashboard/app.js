@@ -30,6 +30,8 @@
   let refreshInterval = null;  // Auto-refresh timer
   let isLoading = false;       // Prevent concurrent fetches
   let isInitialLoad = true;    // Show loading state before first render
+  const ARCHIVE_PAGE_SIZE = 120;
+  let archiveRenderLimit = ARCHIVE_PAGE_SIZE;
 
   // Maps: project-id → hex colour, project-id → [tags]
   let projectColorMap = {};
@@ -74,6 +76,7 @@
     // Archive
     archiveList: $("#archive-list"),
     archiveCount: $("#archive-count"),
+    archiveControls: $("#archive-controls"),
     // Search
     viewSearch: $("#view-search"),
     searchResults: $("#search-results"),
@@ -107,6 +110,8 @@
     agentTipsList: $("#agent-tips-list"),
     // Lightbox
     lightboxOverlay: $("#lightbox-overlay"),
+    lightboxShell: $("#lightbox-shell"),
+    lightboxClose: $("#lightbox-close"),
     lightboxImg: $("#lightbox-img"),
     // Modal inner container (for focus trap)
     modal: $("#task-modal"),
@@ -132,6 +137,10 @@
   const EMPTY_COLUMN_HTML = '<div class="empty-column">No tasks here</div>';
   const EMPTY_FILTERS_HTML = '<div class="empty-state"><p>No tasks match the current filters.</p><button class="btn btn-ghost js-clear-filters">Clear filters</button></div>';
 
+  function loadingSkeletonHTML(count = 6) {
+    return `<div class="loading-skeleton-grid">${Array.from({ length: count }, () => '<div class="skeleton-card"></div>').join("")}</div>`;
+  }
+
   function attachEmptyClearFilters(container) {
     const btn = container.querySelector(".js-clear-filters");
     if (btn) btn.addEventListener("click", clearAllFilters);
@@ -141,6 +150,8 @@
 
   let lastFocusedEl = null;
   let removeTrap = null;
+  let lightboxLastFocusedEl = null;
+  let removeLightboxTrap = null;
 
   function trapFocus(el) {
     const focusable = el.querySelectorAll(
@@ -148,6 +159,7 @@
     );
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
+    if (!first || !last) return () => {};
     function handler(e) {
       if (e.key !== "Tab") return;
       if (e.shiftKey) {
@@ -231,6 +243,7 @@
         if (t) allTasks = t;
         if (a) archivedTasks = a.filter((task) => task.status === "archived");
         attentionTasks = attn || [];
+        archiveRenderLimit = ARCHIVE_PAGE_SIZE;
         buildProjectMaps();
 
         // Load today tasks from API/localStorage (auto-clears on date change)
@@ -311,6 +324,7 @@
 
   function setTagFilter(tag) {
     activeTagFilter = activeTagFilter === tag ? "" : tag;
+    archiveRenderLimit = ARCHIVE_PAGE_SIZE;
     renderFilterChip();
     render();
   }
@@ -374,6 +388,7 @@
     activeTagFilter = "";
     activeProjectFilter = "";
     activePriorityFilter = "";
+    archiveRenderLimit = ARCHIVE_PAGE_SIZE;
     const pSel = $("#filter-project");
     const prSel = $("#filter-priority");
     if (pSel) pSel.value = "";
@@ -623,6 +638,11 @@
   }
 
   function renderWeekFocus() {
+    if (isInitialLoad && allTasks.length === 0) {
+      els.weekGrid.innerHTML = loadingSkeletonHTML(6);
+      return;
+    }
+
     const { monday, sunday } = getWeekBounds();
 
     // Show date range in header
@@ -734,6 +754,16 @@
   // ── Board ───────────────────────────────────────────────────────
 
   function renderBoard() {
+    if (isInitialLoad && allTasks.length === 0) {
+      els.colTodo.innerHTML = loadingSkeletonHTML(3);
+      els.colProgress.innerHTML = loadingSkeletonHTML(3);
+      els.colDone.innerHTML = loadingSkeletonHTML(3);
+      els.colCountTodo.textContent = "—";
+      els.colCountProgress.textContent = "—";
+      els.colCountDone.textContent = "—";
+      return;
+    }
+
     const buckets = { todo: [], "in-progress": [], done: [] };
     for (const task of applyFilters(allTasks)) {
       const s = task.status || "todo";
@@ -827,6 +857,11 @@
   // ── Projects ────────────────────────────────────────────────────
 
   function renderProjects() {
+    if (isInitialLoad && allTasks.length === 0) {
+      els.projectsGrid.innerHTML = loadingSkeletonHTML(6);
+      return;
+    }
+
     if (!allProjects.length) {
       els.projectsGrid.innerHTML =
         '<p class="timeline-empty">No projects yet.</p>';
@@ -869,6 +904,11 @@
   // ── Timeline ────────────────────────────────────────────────────
 
   function renderTimeline() {
+    if (isInitialLoad && allTasks.length === 0) {
+      els.timeline.innerHTML = loadingSkeletonHTML(5);
+      return;
+    }
+
     const withDue = applyFilters(allTasks)
       .filter((t) => t.due && t.status !== "done" && t.status !== "archived")
       .sort((a, b) => (a.due > b.due ? 1 : -1));
@@ -921,15 +961,24 @@
   // ── Archive ─────────────────────────────────────────────────────
 
   function renderArchive() {
+    if (isInitialLoad && allTasks.length === 0) {
+      els.archiveCount.textContent = "";
+      els.archiveList.innerHTML = loadingSkeletonHTML(8);
+      if (els.archiveControls) els.archiveControls.innerHTML = "";
+      return;
+    }
+
     const filtered = applyFilters(archivedTasks);
     if (!filtered.length) {
       els.archiveCount.textContent = "";
       els.archiveList.innerHTML =
         '<p class="archive-empty">No archived tasks yet. Completed tasks will appear here once archived.</p>';
+      if (els.archiveControls) els.archiveControls.innerHTML = "";
       return;
     }
 
-    els.archiveCount.textContent = `${filtered.length} task${filtered.length === 1 ? "" : "s"}`;
+    const visibleCount = Math.min(filtered.length, archiveRenderLimit);
+    els.archiveCount.textContent = `${visibleCount} of ${filtered.length} task${filtered.length === 1 ? "" : "s"}`;
 
     const sorted = [...filtered].sort((a, b) => {
       const dateA = a.done_date || a.updated || a.created || "";
@@ -937,9 +986,11 @@
       return dateB > dateA ? 1 : dateB < dateA ? -1 : 0;
     });
 
+    const visible = sorted.slice(0, visibleCount);
+
     // Group by month
     const groups = {};
-    for (const task of sorted) {
+    for (const task of visible) {
       const raw = task.done_date || task.updated || task.created || "";
       const key = raw ? formatMonth(raw) : "Unknown";
       if (!groups[key]) groups[key] = [];
@@ -965,6 +1016,22 @@
     els.archiveList.querySelectorAll(".archive-item").forEach((item) => {
       item.addEventListener("click", () => openModal(item.dataset.id));
     });
+
+    if (!els.archiveControls) return;
+    if (filtered.length > visibleCount) {
+      const remaining = filtered.length - visibleCount;
+      els.archiveControls.innerHTML =
+        `<button class="btn btn-ghost" id="btn-archive-more">Load ${Math.min(ARCHIVE_PAGE_SIZE, remaining)} more (${remaining} left)</button>`;
+      const loadMoreBtn = $("#btn-archive-more");
+      if (loadMoreBtn) {
+        loadMoreBtn.addEventListener("click", () => {
+          archiveRenderLimit += ARCHIVE_PAGE_SIZE;
+          renderArchive();
+        });
+      }
+    } else {
+      els.archiveControls.innerHTML = "";
+    }
   }
 
   function archiveItemHTML(task) {
@@ -1110,12 +1177,12 @@
     const progress = sc > 0 ? Math.round(sd / sc * 100) : (task.progress || 0);
     if (task.status === "in-progress" && progress > 0) {
       const pColor = getProjectColor(task.project) || "var(--amber)";
-      els.modalProgress.style.display = "block";
+      els.modalProgress.classList.add("open");
       els.modalProgressPct.textContent = sc > 0 ? `${sd}/${sc}` : `${progress}%`;
       els.modalProgressFill.style.width = `${progress}%`;
       els.modalProgressFill.style.background = pColor;
     } else {
-      els.modalProgress.style.display = "none";
+      els.modalProgress.classList.remove("open");
     }
 
     // Subtasks checklist in modal
@@ -1340,13 +1407,20 @@
   // ── Lightbox ────────────────────────────────────────────────────
 
   function openLightbox(src) {
+    lightboxLastFocusedEl = document.activeElement;
     els.lightboxImg.src = src;
     els.lightboxOverlay.classList.add("open");
+    if (els.lightboxClose) els.lightboxClose.focus();
+    if (els.lightboxShell) removeLightboxTrap = trapFocus(els.lightboxShell);
   }
 
   function closeLightbox() {
+    removeLightboxTrap?.();
+    removeLightboxTrap = null;
     els.lightboxOverlay.classList.remove("open");
     els.lightboxImg.src = "";
+    lightboxLastFocusedEl?.focus();
+    lightboxLastFocusedEl = null;
   }
 
   // ── View switching ──────────────────────────────────────────────
@@ -1455,6 +1529,7 @@
     if (filterProject) {
       filterProject.addEventListener("change", () => {
         activeProjectFilter = filterProject.value;
+        archiveRenderLimit = ARCHIVE_PAGE_SIZE;
         renderFilterChip();
         render();
       });
@@ -1462,6 +1537,7 @@
     if (filterPriority) {
       filterPriority.addEventListener("change", () => {
         activePriorityFilter = filterPriority.value;
+        archiveRenderLimit = ARCHIVE_PAGE_SIZE;
         renderFilterChip();
         render();
       });
@@ -1480,7 +1556,10 @@
     els.agentTipsHeader.addEventListener("click", toggleAgentTips);
 
     // Lightbox
-    els.lightboxOverlay.addEventListener("click", closeLightbox);
+    if (els.lightboxClose) els.lightboxClose.addEventListener("click", closeLightbox);
+    els.lightboxOverlay.addEventListener("click", (e) => {
+      if (e.target === els.lightboxOverlay) closeLightbox();
+    });
 
     // Global keyboard
     document.addEventListener("keydown", (e) => {
@@ -1508,6 +1587,7 @@
     }, 30000);
 
     // Initial load
+    render();
     loadAll();
   }
 
