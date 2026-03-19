@@ -346,6 +346,25 @@ def _pnpm_global_root() -> Optional[Path]:
     return None
 
 
+def _npm_global_root() -> Optional[Path]:
+    """Ask npm for the global modules root, if available."""
+    npm = shutil.which("npm")
+    if not npm:
+        return None
+    try:
+        result = subprocess.run(
+            [npm, "root", "-g"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return Path(result.stdout.strip())
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
 def get_skill_root() -> Path:
     """
     Locate the natural-language-planner skill directory.
@@ -353,10 +372,9 @@ def get_skill_root() -> Path:
     Resolution order:
 
     1. ``NLP_SKILL_PATH`` environment variable (explicit override).
-    2. ``~/.openclaw/skills/natural-language-planner`` (user symlink / install).
-    3. pnpm global ``node_modules`` — scans for the skill bundled inside an
-       OpenClaw package (``pnpm root -g``).
-    4. Relative to this file (``scripts/`` lives inside the skill root).
+    2. ``~/.openclaw/skills/natural-language-planner`` (local checkout).
+    3. Skill bundled with an installed OpenClaw package.
+    4. Current working directory.
 
     Returns:
         Resolved ``Path`` to the skill root directory.
@@ -381,41 +399,69 @@ def get_skill_root() -> Path:
             "not contain the expected skill files (SKILL.md, scripts/, templates/)."
         )
 
-    # 2. Standard OpenClaw skill directory
-    openclaw_path = Path.home() / ".openclaw" / "skills" / "natural-language-planner"
-    if _is_skill_root(openclaw_path.resolve()):
-        _skill_root_cache = openclaw_path.resolve()
-        logger.info("Skill root (openclaw dir): %s", _skill_root_cache)
+    # 2. Preferred local git checkout path
+    local_checkout = Path.home() / ".openclaw" / "skills" / "natural-language-planner"
+    if _is_skill_root(local_checkout):
+        _skill_root_cache = local_checkout.resolve()
+        logger.info("Skill root (local checkout): %s", _skill_root_cache)
         return _skill_root_cache
 
-    # 3. pnpm global package (skill bundled inside openclaw)
+    # 3. Installed OpenClaw package paths (npm/pnpm package layouts)
+    installed_candidates: list[Path] = []
+
+    # First, try package-relative location when this module is imported from OpenClaw.
+    # .../openclaw/skills/natural-language-planner/scripts/config_manager.py
+    #                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    module_path = Path(__file__).resolve()
+    if len(module_path.parents) >= 4:
+        module_openclaw_dir = module_path.parents[3]
+        installed_candidates.append(
+            module_openclaw_dir / "skills" / "natural-language-planner"
+        )
+
+    npm_root = _npm_global_root()
+    if npm_root:
+        installed_candidates.extend(
+            [
+                npm_root / "natural-language-planner",
+                npm_root / "openclaw" / "skills" / "natural-language-planner",
+            ]
+        )
+
     pnpm_root = _pnpm_global_root()
     if pnpm_root:
-        candidates = [
-            pnpm_root / "natural-language-planner",
-            pnpm_root / "openclaw" / "skills" / "natural-language-planner",
-        ]
-        for pnpm_candidate in candidates:
-            resolved = pnpm_candidate.resolve()
-            if _is_skill_root(resolved):
-                _skill_root_cache = resolved
-                logger.info("Skill root (pnpm global): %s", resolved)
-                return resolved
+        installed_candidates.extend(
+            [
+                pnpm_root / "natural-language-planner",
+                pnpm_root / "openclaw" / "skills" / "natural-language-planner",
+            ]
+        )
 
-    # 4. Relative to this file (scripts/ is one level below the skill root)
-    relative = (Path(__file__).parent.parent).resolve()
-    if _is_skill_root(relative):
-        _skill_root_cache = relative
-        logger.info("Skill root (relative): %s", relative)
-        return relative
+    seen: set[Path] = set()
+    for candidate in installed_candidates:
+        resolved = candidate.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if _is_skill_root(resolved):
+            _skill_root_cache = resolved
+            logger.info("Skill root (installed package): %s", resolved)
+            return resolved
+
+    # 4. Current working directory
+    cwd = Path.cwd().resolve()
+    if _is_skill_root(cwd):
+        _skill_root_cache = cwd
+        logger.info("Skill root (cwd): %s", cwd)
+        return cwd
 
     raise FileNotFoundError(
         "Could not locate the natural-language-planner skill.\n"
         "Searched:\n"
         f"  - NLP_SKILL_PATH / SKILL_PATH env var (not set)\n"
-        f"  - {openclaw_path}\n"
-        f"  - pnpm global root ({pnpm_root or 'pnpm not found'})\n"
-        f"  - {relative}\n"
+        f"  - {local_checkout}\n"
+        f"  - installed OpenClaw package candidates ({len(seen)} checked)\n"
+        f"  - {cwd}\n"
         "Set NLP_SKILL_PATH (or SKILL_PATH) to the directory "
         "containing SKILL.md, scripts/, and templates/."
     )
