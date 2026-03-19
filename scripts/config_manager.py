@@ -408,7 +408,9 @@ def get_skill_root() -> Path:
     # 2. Preferred local git checkout path
     local_checkout = Path.home() / ".openclaw" / "skills" / "natural-language-planner"
     if _is_skill_root(local_checkout):
-        _skill_root_cache = local_checkout.resolve()
+        # Keep the configured local path as-is to avoid symlink canonicalization
+        # into global package paths (which obscures source-of-truth identity).
+        _skill_root_cache = local_checkout
         logger.info("Skill root (local checkout): %s", _skill_root_cache)
         return _skill_root_cache
 
