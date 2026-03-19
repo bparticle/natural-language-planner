@@ -51,13 +51,13 @@
           <span class="today-label">Today</span>
           <span class="today-date" id="today-date"></span>
         </div>
-        <div class="today-list" id="today-list">
+        <div class="today-list" id="today-list" aria-live="polite">
           <div class="today-empty">No tasks for today yet.</div>
         </div>
       </div>
 
       <!-- Stats bar -->
-      <div class="stats-bar" id="stats-bar">
+      <div class="stats-bar" id="stats-bar" aria-label="Task statistics">
         <div class="stat-card">
           <span class="stat-value" id="stat-total">—</span>
           <span class="stat-label">Total Tasks</span>
@@ -84,6 +84,17 @@
         </div>
       </div>
     </section>
+    <span id="stats-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
+
+    <!-- ── Error banner ────────────────────────────────────── -->
+    <div id="error-banner" role="alert" hidden>
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span id="error-message">Could not reach the planner server.</span>
+      <button id="btn-retry" class="btn btn-ghost">Retry</button>
+    </div>
 
     <!-- ── View tabs ───────────────────────────────────────── -->
     <nav class="view-tabs" role="tablist" aria-label="Dashboard views">
@@ -114,7 +125,7 @@
     <main class="main-content">
       <!-- This Week focus view (default) -->
       <div class="view view-focus active" id="view-focus">
-        <div class="attention-banner" id="attention-banner" style="display:none">
+        <div class="attention-banner" id="attention-banner" role="status" aria-live="polite" style="display:none">
           <div class="attention-header">
             <span class="attention-icon">&#9888;</span>
             <span class="attention-title">Needs Attention</span>
@@ -185,14 +196,15 @@
       <!-- Search results overlay -->
       <div class="view view-search" id="view-search" style="display:none">
         <h2 class="search-title">Search Results</h2>
+        <span id="search-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
         <div id="search-results"></div>
       </div>
     </main>
 
     <!-- ── Task detail modal ───────────────────────────────── -->
-    <div class="modal-overlay" id="modal-overlay">
+    <div class="modal-overlay" id="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <div class="modal" id="task-modal">
-        <button class="modal-close" id="modal-close">&times;</button>
+        <button class="modal-close" id="modal-close" aria-label="Close task detail">&times;</button>
         <div class="modal-header">
           <span class="badge" id="modal-status"></span>
           <span class="badge badge-priority" id="modal-priority"></span>

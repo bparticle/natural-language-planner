@@ -28,6 +28,8 @@
   let activeProjectFilter = ""; // Currently active project filter
   let activePriorityFilter = ""; // Currently active priority filter
   let refreshInterval = null;  // Auto-refresh timer
+  let isLoading = false;       // Prevent concurrent fetches
+  let isInitialLoad = true;    // Show loading state before first render
 
   // Maps: project-id → hex colour, project-id → [tags]
   let projectColorMap = {};
@@ -108,7 +110,32 @@
     lightboxImg: $("#lightbox-img"),
     // Modal inner container (for focus trap)
     modal: $("#task-modal"),
+    // Error banner
+    errorBanner: $("#error-banner"),
+    errorMessage: $("#error-message"),
+    btnRetry: $("#btn-retry"),
+    // Live status spans
+    statsStatus: $("#stats-status"),
+    searchStatus: $("#search-status"),
   };
+
+  // ── Utilities ───────────────────────────────────────────────────
+
+  function debounce(fn, ms) {
+    let timer;
+    return function (...args) {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn.apply(this, args), ms);
+    };
+  }
+
+  const EMPTY_COLUMN_HTML = '<div class="empty-column">No tasks here</div>';
+  const EMPTY_FILTERS_HTML = '<div class="empty-state"><p>No tasks match the current filters.</p><button class="btn btn-ghost js-clear-filters">Clear filters</button></div>';
+
+  function attachEmptyClearFilters(container) {
+    const btn = container.querySelector(".js-clear-filters");
+    if (btn) btn.addEventListener("click", clearAllFilters);
+  }
 
   // ── Focus management ────────────────────────────────────────────
 
@@ -139,12 +166,19 @@
     const saved = localStorage.getItem("nlp-theme");
     if (saved === "dark" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
       els.body.classList.add("dark");
+      els.btnTheme.setAttribute("aria-pressed", "true");
     }
+    // Add transition class after first paint to avoid flash on load
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.body.classList.add("theme-ready");
+    }));
   }
 
   function toggleTheme() {
     els.body.classList.toggle("dark");
-    localStorage.setItem("nlp-theme", els.body.classList.contains("dark") ? "dark" : "light");
+    const isDark = els.body.classList.contains("dark");
+    localStorage.setItem("nlp-theme", isDark ? "dark" : "light");
+    els.btnTheme.setAttribute("aria-pressed", isDark ? "true" : "false");
   }
 
   // ── API helpers ─────────────────────────────────────────────────
@@ -163,39 +197,69 @@
   // ── Data loading ────────────────────────────────────────────────
 
   async function loadAll() {
-    // Visual feedback — spin the refresh icon while loading
+    if (isLoading) return;
+    isLoading = true;
+    els.btnRefresh.disabled = true;
+    els.btnRefresh.setAttribute("aria-disabled", "true");
     els.btnRefresh.classList.add("spinning");
 
-    const [s, p, t, a, attn] = await Promise.all([
-      api("/api/stats"),
-      api("/api/projects"),
-      api("/api/tasks"),
-      api("/api/tasks?include_archived=true"),
-      api("/api/needs-attention"),
-    ]);
+    try {
+      const [s, p, t, a, attn] = await Promise.all([
+        api("/api/stats"),
+        api("/api/projects"),
+        api("/api/tasks"),
+        api("/api/tasks?include_archived=true"),
+        api("/api/needs-attention"),
+      ]);
 
-    // Fingerprint the response data — skip re-render if nothing changed
-    const fingerprint = JSON.stringify([s, p, t, a]);
-    const dataChanged = fingerprint !== lastDataFingerprint;
-    lastDataFingerprint = fingerprint;
+      // If all core endpoints failed, treat as a connection error
+      if (!s && !p && !t) {
+        showError("Could not reach the planner server.");
+        return;
+      }
 
-    if (dataChanged) {
-      if (s) stats = s;
-      if (p) allProjects = p;
-      if (t) allTasks = t;
-      if (a) archivedTasks = a.filter((task) => task.status === "archived");
-      attentionTasks = attn || [];
-      buildProjectMaps();
+      hideError();
 
-      // Load today tasks from API/localStorage (auto-clears on date change)
-      todayTaskIds = await loadTodayTasks();
-      // Seed example "today" tasks if the list is empty (demo purposes)
-      await seedTodayExamples();
+      // Fingerprint the response data — skip re-render if nothing changed
+      const fingerprint = JSON.stringify([s, p, t, a]);
+      const dataChanged = fingerprint !== lastDataFingerprint;
+      lastDataFingerprint = fingerprint;
 
-      render();
+      if (dataChanged) {
+        if (s) stats = s;
+        if (p) allProjects = p;
+        if (t) allTasks = t;
+        if (a) archivedTasks = a.filter((task) => task.status === "archived");
+        attentionTasks = attn || [];
+        buildProjectMaps();
+
+        // Load today tasks from API/localStorage (auto-clears on date change)
+        todayTaskIds = await loadTodayTasks();
+        // Seed example "today" tasks if the list is empty (demo purposes)
+        await seedTodayExamples();
+
+        render();
+        if (els.statsStatus) els.statsStatus.textContent = "Stats updated";
+      }
+
+      isInitialLoad = false;
+    } catch (err) {
+      showError("Could not reach the planner server.");
+    } finally {
+      isLoading = false;
+      els.btnRefresh.disabled = false;
+      els.btnRefresh.setAttribute("aria-disabled", "false");
+      els.btnRefresh.classList.remove("spinning");
     }
+  }
 
-    els.btnRefresh.classList.remove("spinning");
+  function showError(msg) {
+    if (els.errorMessage) els.errorMessage.textContent = msg;
+    if (els.errorBanner) els.errorBanner.hidden = false;
+  }
+
+  function hideError() {
+    if (els.errorBanner) els.errorBanner.hidden = true;
   }
 
   /**
@@ -602,8 +666,13 @@
     });
 
     if (!weekTasks.length) {
-      els.weekGrid.innerHTML =
-        '<div class="week-empty">No tasks this week. Tell your assistant what you\'re working on!</div>';
+      if (hasActiveFilters()) {
+        els.weekGrid.innerHTML = EMPTY_FILTERS_HTML;
+        attachEmptyClearFilters(els.weekGrid);
+      } else {
+        els.weekGrid.innerHTML =
+          '<div class="week-empty">No tasks this week. Tell your assistant what you\'re working on!</div>';
+      }
       return;
     }
 
@@ -671,9 +740,9 @@
       if (buckets[s]) buckets[s].push(task);
     }
 
-    els.colTodo.innerHTML = buckets.todo.map(taskCardHTML).join("");
-    els.colProgress.innerHTML = buckets["in-progress"].map(taskCardHTML).join("");
-    els.colDone.innerHTML = buckets.done.map(taskCardHTML).join("");
+    els.colTodo.innerHTML = buckets.todo.length ? buckets.todo.map(taskCardHTML).join("") : EMPTY_COLUMN_HTML;
+    els.colProgress.innerHTML = buckets["in-progress"].length ? buckets["in-progress"].map(taskCardHTML).join("") : EMPTY_COLUMN_HTML;
+    els.colDone.innerHTML = buckets.done.length ? buckets.done.map(taskCardHTML).join("") : EMPTY_COLUMN_HTML;
 
     els.colCountTodo.textContent = buckets.todo.length;
     els.colCountProgress.textContent = buckets["in-progress"].length;
@@ -932,7 +1001,10 @@
 
   // ── Search ──────────────────────────────────────────────────────
 
-  let searchDebounce = null;
+  const debouncedSearchApi = debounce(async (query) => {
+    const results = await api(`/api/search?q=${encodeURIComponent(query)}`);
+    showSearch(results || [], query);
+  }, 300);
 
   function handleSearch() {
     const query = els.searchInput.value.trim();
@@ -940,26 +1012,24 @@
       hideSearch();
       return;
     }
-    clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(async () => {
-      const results = await api(`/api/search?q=${encodeURIComponent(query)}`);
-      showSearch(results || []);
-    }, 300);
+    debouncedSearchApi(query);
   }
 
-  function showSearch(results) {
+  function showSearch(results, query) {
     els.views.forEach((v) => v.classList.remove("active"));
     els.viewSearch.style.display = "block";
     els.viewSearch.classList.add("active");
 
     if (!results.length) {
-      els.searchResults.innerHTML =
-        '<p class="search-empty">No tasks found.</p>';
+      const q = esc(query || "");
+      els.searchResults.innerHTML = `<div class="empty-state"><p>No tasks match &ldquo;${q}&rdquo;</p></div>`;
+      if (els.searchStatus) els.searchStatus.textContent = `No results for "${query}"`;
       return;
     }
 
     els.searchResults.innerHTML = results.map(taskCardHTML).join("");
     attachCardClicks();
+    if (els.searchStatus) els.searchStatus.textContent = `${results.length} result${results.length === 1 ? "" : "s"} for "${query}"`;
   }
 
   function hideSearch() {
@@ -1366,6 +1436,9 @@
         switchView(tab.dataset.view);
       });
     });
+
+    // Retry button
+    if (els.btnRetry) els.btnRetry.addEventListener("click", () => { hideError(); loadAll(); });
 
     // Search
     els.searchInput.addEventListener("input", handleSearch);
