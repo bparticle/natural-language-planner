@@ -609,6 +609,15 @@ def update_task(task_id: str, updates: dict[str, Any]) -> bool:
     return safe_write_file(path, content)
 
 
+def _task_file_is_under_archive(root: Path, task_file: Path) -> bool:
+    """True if *task_file* is stored under the workspace ``archive/`` tree."""
+    try:
+        task_file.resolve().relative_to((root / "archive").resolve())
+        return True
+    except ValueError:
+        return False
+
+
 def list_tasks(
     filter_by: Optional[dict[str, Any]] = None,
     project_id: Optional[str] = None,
@@ -664,6 +673,8 @@ def list_tasks(
                 continue
             meta, body = parse_frontmatter(raw)
             meta["_path"] = str(task_file)
+            if _task_file_is_under_archive(root, task_file):
+                meta["status"] = "archived"
 
             # Extract first image attachment as thumbnail
             thumb = _extract_first_image(body)

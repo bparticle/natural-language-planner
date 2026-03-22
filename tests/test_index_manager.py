@@ -154,3 +154,20 @@ class TestStats:
         assert stats["by_priority"]["medium"] == 1
         assert stats["by_priority"]["low"] == 1
         assert stats["overdue"] >= 1  # At least "Deploy to staging"
+
+    def test_archived_file_without_status_gets_archived_in_index(self, workspace):
+        """Indexer must set status archived so stats/search match on-disk archive."""
+        path = workspace / "archive" / "inbox" / "tasks"
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "task-legacy.md").write_text(
+            "---\nid: task-legacy\ntitle: Legacy only path\n---\n",
+            encoding="utf-8",
+        )
+        rebuild_index()
+        stats = get_stats()
+        assert stats["by_status"]["archived"] >= 1
+        found = search_tasks("Legacy only path", include_archived=True)
+        assert any(
+            t.get("id") == "task-legacy" and t.get("status") == "archived"
+            for t in found
+        )

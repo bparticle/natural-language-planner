@@ -81,6 +81,7 @@ def rebuild_index() -> bool:
             meta, body = parse_frontmatter(raw)
             tid = meta.get("id", task_file.stem)
             entry = {**meta, "_body": body, "_path": str(task_file), "_archived": True}
+            entry["status"] = "archived"
             _enrich_subtask_counts(entry, body)
             _index["tasks"][tid] = entry
 

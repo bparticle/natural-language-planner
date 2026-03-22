@@ -161,6 +161,19 @@ class TestTasks:
         tasks = list_tasks(filter_by={"status": "todo"})
         assert not any(t["id"] == tid for t in tasks)
 
+    def test_list_archived_normalizes_status_from_path(self, workspace):
+        """Tasks under archive/ must report status archived (dashboard filter)."""
+        archive_tasks = workspace / "archive" / "inbox" / "tasks"
+        archive_tasks.mkdir(parents=True, exist_ok=True)
+        (archive_tasks / "task-legacy.md").write_text(
+            "---\nid: task-legacy\ntitle: Legacy archived\n---\n\nBody\n",
+            encoding="utf-8",
+        )
+        found = list_tasks(include_archived=True)
+        leg = next((t for t in found if t.get("id") == "task-legacy"), None)
+        assert leg is not None
+        assert leg["status"] == "archived"
+
     def test_move_task(self, workspace):
         create_project("Destination")
         tid = create_task("Movable")
