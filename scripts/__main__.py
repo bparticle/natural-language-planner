@@ -22,7 +22,7 @@ import json
 
 from .utils import setup_logging
 from .file_manager import init_workspace, list_tasks, list_projects
-from .config_manager import load_config, set_config_path
+from .config_manager import load_config, set_workspace_path
 from .index_manager import rebuild_index, search_tasks, get_stats
 from .dashboard_server import start_dashboard, ensure_dashboard, get_dashboard_url, get_dashboard_port
 from .tunnel import start_tunnel, stop_tunnel, get_tunnel_url, detect_tunnel_tool, get_install_instructions
@@ -226,7 +226,11 @@ def _ensure_workspace(args: argparse.Namespace) -> None:
     """Point the config manager at the workspace, if provided."""
     ws = getattr(args, "workspace_path", None)
     if ws:
-        set_config_path(ws)
+        # Persist resolved path into config so workspace_path matches this machine
+        # (avoids stale paths like /mnt/... when testing a synced copy on Windows).
+        if not set_workspace_path(ws):
+            print(f"Failed to use workspace: {ws}", file=sys.stderr)
+            sys.exit(1)
     else:
         # Try loading existing config to find workspace path
         config = load_config()

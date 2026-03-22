@@ -123,13 +123,15 @@ def main() -> None:
         sys.path.insert(0, str(skill_root))
 
     from scripts.utils import setup_logging
-    from scripts.config_manager import set_config_path, load_config
+    from scripts.config_manager import set_workspace_path, load_config
     from scripts.dashboard_server import start_dashboard
 
     setup_logging()
 
     if args.workspace_path:
-        set_config_path(args.workspace_path)
+        if not set_workspace_path(args.workspace_path):
+            print(f"Failed to use workspace: {args.workspace_path}", file=sys.stderr)
+            sys.exit(1)
     else:
         config = load_config()
         if not config.get("workspace_path"):

@@ -618,6 +618,23 @@ def _task_file_is_under_archive(root: Path, task_file: Path) -> bool:
         return False
 
 
+def _task_file_is_in_project_archive(root: Path, task_file: Path) -> bool:
+    """True if *task_file* is under ``projects/<project_id>/archive/tasks/``."""
+    try:
+        rel = task_file.resolve().relative_to((root / "projects").resolve())
+    except ValueError:
+        return False
+    parts = rel.parts
+    return len(parts) >= 4 and parts[1] == "archive" and parts[2] == "tasks"
+
+
+def _task_path_implies_archived(root: Path, task_file: Path) -> bool:
+    """True if on-disk location means the task is archived (any layout)."""
+    return _task_file_is_under_archive(root, task_file) or _task_file_is_in_project_archive(
+        root, task_file
+    )
+
+
 def list_tasks(
     filter_by: Optional[dict[str, Any]] = None,
     project_id: Optional[str] = None,
@@ -630,7 +647,8 @@ def list_tasks(
         filter_by: Optional dict of field->value filters applied to metadata.
                    Supports: status, priority, tags (matches if any tag present).
         project_id: If provided, only list tasks in this project.
-        include_archived: If True, also scan the archive directory.
+        include_archived: If True, also scan ``archive/<project>/tasks/`` and
+            ``projects/<project>/archive/tasks/``.
 
     Returns:
         List of task metadata dictionaries.
@@ -653,8 +671,15 @@ def list_tasks(
     else:
         search_dirs = list(projects_dir.glob("*/tasks"))
 
-    # Also scan the archive directory when requested
+    # Also scan archive locations when requested
     if include_archived:
+        if project_id:
+            nested = projects_dir / project_id / "archive" / "tasks"
+            if nested.is_dir():
+                search_dirs.append(nested)
+        else:
+            search_dirs.extend(projects_dir.glob("*/archive/tasks"))
+
         archive_dir = root / "archive"
         if archive_dir.is_dir():
             if project_id:
@@ -673,7 +698,7 @@ def list_tasks(
                 continue
             meta, body = parse_frontmatter(raw)
             meta["_path"] = str(task_file)
-            if _task_file_is_under_archive(root, task_file):
+            if _task_path_implies_archived(root, task_file):
                 meta["status"] = "archived"
 
             # Extract first image attachment as thumbnail
@@ -1207,7 +1232,11 @@ def _find_task_file(task_id: str) -> Optional[Path]:
     for task_file in (root / "projects").glob(f"*/tasks/{task_id}.md"):
         return task_file
 
-    # Search archive
+    # Nested per-project archive (projects/<id>/archive/tasks/)
+    for task_file in (root / "projects").glob(f"*/archive/tasks/{task_id}.md"):
+        return task_file
+
+    # Workspace archive (archive/<id>/tasks/)
     for task_file in (root / "archive").glob(f"*/tasks/{task_id}.md"):
         return task_file
 

@@ -174,6 +174,19 @@ class TestTasks:
         assert leg is not None
         assert leg["status"] == "archived"
 
+    def test_list_nested_project_archive(self, workspace):
+        """Tasks under projects/<id>/archive/tasks/ are listed when include_archived."""
+        nested = workspace / "projects" / "inbox" / "archive" / "tasks"
+        nested.mkdir(parents=True, exist_ok=True)
+        (nested / "task-nested.md").write_text(
+            "---\nid: task-nested\ntitle: Nested archive\n---\n",
+            encoding="utf-8",
+        )
+        found = list_tasks(include_archived=True)
+        row = next((t for t in found if t.get("id") == "task-nested"), None)
+        assert row is not None
+        assert row["status"] == "archived"
+
     def test_move_task(self, workspace):
         create_project("Destination")
         tid = create_task("Movable")

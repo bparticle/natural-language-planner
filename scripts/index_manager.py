@@ -71,7 +71,19 @@ def rebuild_index() -> bool:
         _enrich_subtask_counts(entry, body)
         _index["tasks"][tid] = entry
 
-    # Also index archived tasks for search
+    # Per-project nested archives (projects/<id>/archive/tasks/)
+    for task_file in projects_dir.glob("*/archive/tasks/task-*.md"):
+        raw = safe_read_file(task_file)
+        if raw is None:
+            continue
+        meta, body = parse_frontmatter(raw)
+        tid = meta.get("id", task_file.stem)
+        entry = {**meta, "_body": body, "_path": str(task_file), "_archived": True}
+        entry["status"] = "archived"
+        _enrich_subtask_counts(entry, body)
+        _index["tasks"][tid] = entry
+
+    # Workspace archive (archive/<id>/tasks/) — last write wins over nested for duplicate IDs
     archive_dir = root / "archive"
     if archive_dir.exists():
         for task_file in archive_dir.glob("*/tasks/task-*.md"):

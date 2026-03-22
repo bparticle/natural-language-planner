@@ -171,3 +171,15 @@ class TestStats:
             t.get("id") == "task-legacy" and t.get("status") == "archived"
             for t in found
         )
+
+    def test_nested_project_archive_in_index(self, workspace):
+        """Indexer includes projects/<id>/archive/tasks/."""
+        nested = workspace / "projects" / "inbox" / "archive" / "tasks"
+        nested.mkdir(parents=True, exist_ok=True)
+        (nested / "task-nested.md").write_text(
+            "---\nid: task-nested\ntitle: Nested index me\n---\n",
+            encoding="utf-8",
+        )
+        rebuild_index()
+        found = search_tasks("Nested index me", include_archived=True)
+        assert any(t.get("id") == "task-nested" for t in found)
