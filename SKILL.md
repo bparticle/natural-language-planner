@@ -1175,11 +1175,39 @@ link_tasks("task-002", "task-001")  # task-002 depends on task-001
 
 ### Archive completed work
 
+Use the `archive_task()` function to move done tasks to archive. **Do not manually move files** — the function handles the correct folder structure automatically.
+
 ```python
 from scripts.file_manager import archive_task, archive_project
 archive_task("task-003")
 archive_project("old-project")
 ```
+
+**IMPORTANT: Archive Folder Structure**
+
+The `archive_task()` function automatically creates the correct structure:
+```
+workspace/
+├── projects/
+│   ├── project-id-1/
+│   │   ├── tasks/              ← active tasks go here
+│   │   │   ├── task-001.md
+│   │   │   └── task-002.md
+│   │   └── archive/
+│   │       └── tasks/          ← done tasks go here (NOT project/archive/task.md)
+│   │           └── task-003.md
+│   │
+│   └── project-id-2/
+│       ├── tasks/
+│       └── archive/
+│           └── tasks/
+```
+
+**Key point:** Archive structure is `archive/tasks/` not just `archive/`. The dashboard indexer expects this structure. If you manually move files, use this format:
+- ❌ Wrong: `project/archive/task-001.md`
+- ✅ Correct: `project/archive/tasks/task-001.md`
+
+**Use the function** — it handles this automatically. Never manually move done tasks.
 
 ### Create a task with subtasks
 
