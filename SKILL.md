@@ -21,6 +21,15 @@ top of their work — all stored as simple Markdown files on their local machine
 
 ## 1. First-Time Setup
 
+Before calling any planner Python helpers against an existing workspace, point the skill at the correct workspace first:
+
+```python
+from scripts.config_manager import set_config_path
+set_config_path("/mnt/ClawFiles/nlplanner")  # use the real workspace root
+```
+
+This matters on systems with multiple planner locations. If you skip `set_config_path(...)`, the scripts may silently fall back to `~/nlplanner/.nlplanner/config.json`, and updates/archives can hit the wrong workspace.
+
 If the workspace has **not** been initialised yet (no `.nlplanner/config.json`
 exists in the workspace path), walk the user through setup:
 
